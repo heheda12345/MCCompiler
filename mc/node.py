@@ -15,26 +15,41 @@ class Node:
     name: str
     input_nodes: List['IndexNode']
     output_nodes: List['IndexNode']
+
     input_types: List[TensorType]
     output_types: List[TensorType]
-    type: NodeType
 
-    @classmethod
-    def from_onnx(cls, onnx_node: onnx.NodeProto | onnx.ValueInfoProto | onnx.TensorProto,
-                  node_type: NodeType):
-        node = cls()
-        node.name = onnx_node.name
-        node.type = node_type
-        if node_type is NodeType.input or node_type is NodeType.initializer:
-            node.input_nodes = []
-            node.output_nodes = [None]
-        elif node_type is NodeType.node:
-            node.input_nodes = [None] * len(onnx_node.input)
-            node.output_nodes = [None] * len(onnx_node.output)
-        elif node_type is NodeType.output:
-            node.input_nodes = [None]
-            node.output_nodes = []
-        return node
+    def __init__(self, name:str='',
+                 input_nodes:List['IndexNode']=[], output_nodes:List['IndexNode']=[],
+                 input_types:List[TensorType]=[], output_types:List[TensorType]=[]) -> None:
+        self.name = name
+        self.input_nodes = input_nodes
+        self.output_nodes = output_nodes
+        self.input_types = input_types
+        self.output_types = output_types
+
+    # @classmethod
+    # def from_onnx(cls, onnx_node: onnx.NodeProto | onnx.ValueInfoProto | onnx.TensorProto,
+    #               node_type: NodeType,
+    #               input_types: List[TensorType] = None,
+    #               output_types: List[TensorType] = None):
+    #     if node_type == NodeType.input:
+    #         node = operators.Input()
+    #     elif node_type == NodeType.initializer:
+    #         node = operators.Constant()
+    #     elif node_type == NodeType.node:
+    #         print(dir(operators))
+    #         raise NotImplementedError
+    #     elif node_type == NodeType.output:
+    #         node = operators.Output()
+
+    #     node.name = onnx_node.name
+    #     node.type = node_type
+    #     node.input_types = input_types
+    #     node.output_types = output_types
+    #     node.input_nodes = [None] * len(input_types)
+    #     node.output_nodes = [None] * len(output_types)
+    #     return node
     
     def io_all_exist(self):
         for node in self.input_nodes:
@@ -44,10 +59,6 @@ class Node:
             if node is None:
                 return False
         return True
-
-    def set_io_type(self, input_types: List[TensorType], output_types: List[TensorType]):
-        self.input_types = input_types
-        self.output_types = output_types
 
     def set_input(self, src_node: 'IndexNode', dst_node: 'IndexNode'):
         self.input_nodes[dst_node.index] = src_node
