@@ -1,5 +1,6 @@
 from __future__ import annotations
-from typing import List, Optional
+from typing import List
+from mc.types import TensorType
 import onnx
 import enum
 
@@ -14,23 +15,26 @@ class Node:
     name: str
     input_nodes: List['IndexNode']
     output_nodes: List['IndexNode']
+    input_types: List[TensorType]
+    output_types: List[TensorType]
     type: NodeType
 
     @classmethod
-    def from_onnx(cls, onnx_node: onnx.NodeProto | onnx.ValueInfoProto | onnx.TensorProto, node_type):
-        op = cls()
-        op.name = onnx_node.name
-        op.type = node_type
+    def from_onnx(cls, onnx_node: onnx.NodeProto | onnx.ValueInfoProto | onnx.TensorProto,
+                  node_type: NodeType):
+        node = cls()
+        node.name = onnx_node.name
+        node.type = node_type
         if node_type is NodeType.input or node_type is NodeType.initializer:
-            op.input_nodes = []
-            op.output_nodes = [None]
+            node.input_nodes = []
+            node.output_nodes = [None]
         elif node_type is NodeType.node:
-            op.input_nodes = [None] * len(onnx_node.input)
-            op.output_nodes = [None] * len(onnx_node.output)
+            node.input_nodes = [None] * len(onnx_node.input)
+            node.output_nodes = [None] * len(onnx_node.output)
         elif node_type is NodeType.output:
-            op.input_nodes = [None]
-            op.output_nodes = []
-        return op
+            node.input_nodes = [None]
+            node.output_nodes = []
+        return node
     
     def io_all_exist(self):
         for node in self.input_nodes:
@@ -40,15 +44,24 @@ class Node:
             if node is None:
                 return False
         return True
-    
+
+    def set_io_type(self, input_types: List[TensorType], output_types: List[TensorType]):
+        self.input_types = input_types
+        self.output_types = output_types
+
     def set_input(self, src_node: 'IndexNode', dst_node: 'IndexNode'):
         self.input_nodes[dst_node.index] = src_node
     
     def set_output(self, src_node: 'IndexNode', dst_node: 'IndexNode'):
         self.output_nodes[src_node.index] = dst_node
+    
+    def parse_op_from_onnx(self, onnx_node: onnx.NodeProto):
+        raise NotImplementedError
 
     def __str__(self) -> str:
-        return '{}: {} -> {}'.format(self.name, self.input_nodes, self.output_nodes)
+        return '{}: {} -> {} | {} -> {}'.format(
+            self.name, self.input_nodes, self.output_nodes, self.input_types, self.output_types
+        )
 
     def __repr__(self) -> str:
         return self.__str__()
