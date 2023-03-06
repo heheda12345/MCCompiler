@@ -42,8 +42,7 @@ class MatMul(UniMatMul):
         self, name:str,
         input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
         input_types:List[TensorType], output_types:List[TensorType],
-        input_constants: List[Optional[np.ndarray]] = [],
-        onnx_node:Optional[onnx.NodeProto] = None,
+        input_constants: List[Optional[np.ndarray]],
     ) -> None:
         # super().__init__(name, input_nodes, output_nodes, input_types, output_types)
         if len(input_types[0].shape) > 3 or len(input_types[1].shape) > 3:
@@ -61,14 +60,16 @@ class MatMul(UniMatMul):
         output_stride = [size_m * size_k, size_k, 1]
         super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants, size_b, size_m, size_n, size_k, input0_stride, input1_stride, output_stride)
 
+
 # [m, k] * [k, n] -> [m, n]
 class Gemm(UniMatMul):
-    def __init__(
-        self, name:str,
+    @classmethod
+    def from_onnx(
+        cls, name:str,
         input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
         input_types:List[TensorType], output_types:List[TensorType],
-        input_constants: List[Optional[np.ndarray]] = [],
-        onnx_node:Optional[onnx.NodeProto] = None,
+        input_constants: List[Optional[np.ndarray]],
+        onnx_node:onnx.NodeProto,
     ) -> None:
         size_b = 1
         attributes = {attr.name: attr for attr in onnx_node.attribute}
@@ -90,4 +91,4 @@ class Gemm(UniMatMul):
             input1_stride = [0, size_n, 1]
         bias_stride = [0, 0, 1]
         output_stride = [size_m * size_n, size_n, 1]
-        super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants, size_b, size_m, size_n, size_k, input0_stride, input1_stride, output_stride, bias_stride, alpha, beta)
+        return cls(name, input_nodes, output_nodes, input_types, output_types, input_constants, size_b, size_m, size_n, size_k, input0_stride, input1_stride, output_stride, bias_stride, alpha, beta)

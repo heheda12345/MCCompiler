@@ -11,26 +11,35 @@ class Constant(Node):
         self, name:str,
         input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
         input_types:List[TensorType], output_types:List[TensorType],
-        input_constants: List[Optional[np.ndarray]] = [],
-        onnx_node:Optional[onnx.NodeProto] = None,
-        value:Optional[np.ndarray] = None,
+        input_constants: List[Optional[np.ndarray]],
+        value:Optional[np.ndarray],
     ) -> None:
         super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants)
         value_is_in_constants = len(input_constants) > 0 and input_constants[0] is not None
-        assert (onnx_node is not None) + (value is not None) + value_is_in_constants == 1
-        if onnx_node is not None:
-            self.value = numpy_helper.to_array(onnx_node.attribute[0].t)
-        elif value_is_in_constants:
-            self.value = input_constants[0]
-        else:
-            self.value = value
+        assert value is not None
+        self.value = value
+    
+    @classmethod
+    def from_onnx(cls, name:str,
+                  input_nodes: List['IndexNode'], output_nodes: List[List['IndexNode']],
+                  input_types: List[TensorType], output_types: List[TensorType],
+                  input_constants: List[np.ndarray], onnx_node: onnx.NodeProto) -> Node:
+        value = numpy_helper.to_array(onnx_node.attribute[0].t)
+        return cls(name, input_nodes, output_nodes, input_types, output_types, input_constants, value=value)
+
 
 class ConstantOfShape(Constant):
     def __init__(
         self, name:str,
         input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
         input_types:List[TensorType], output_types:List[TensorType],
-        input_constants: List[Optional[np.ndarray]] = [],
-        onnx_node:Optional[onnx.NodeProto] = None,
+        input_constants: List[Optional[np.ndarray]]
     ) -> None:
         super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants)
+    
+    @classmethod
+    def from_onnx(cls, name:str,
+                  input_nodes: List['IndexNode'], output_nodes: List[List['IndexNode']],
+                  input_types: List[TensorType], output_types: List[TensorType],
+                  input_constants: List[np.ndarray], onnx_node: onnx.NodeProto) -> Node:
+        raise NotImplementedError

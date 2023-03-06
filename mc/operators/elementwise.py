@@ -14,101 +14,31 @@ class ElementWiseBinary(ElementWise):
     pass
 
 class Add(ElementWiseBinary):
-    def __init__(
-        self, name:str,
-        input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
-        input_types:List[TensorType], output_types:List[TensorType],
-        input_constants: List[Optional[np.ndarray]] = [],
-        onnx_node:Optional[onnx.NodeProto] = None,
-    ) -> None:
-        super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants)
+    pass
 
 class Sub(ElementWiseBinary):
-    def __init__(
-        self, name:str,
-        input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
-        input_types:List[TensorType], output_types:List[TensorType],
-        input_constants: List[Optional[np.ndarray]] = [],
-        onnx_node:Optional[onnx.NodeProto] = None,
-    ) -> None:
-        super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants)
+    pass
 
 class Mul(ElementWiseBinary):
-    def __init__(
-        self, name:str,
-        input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
-        input_types:List[TensorType], output_types:List[TensorType],
-        input_constants: List[Optional[np.ndarray]] = [],
-        onnx_node:Optional[onnx.NodeProto] = None,
-    ) -> None:
-        super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants)
+    pass
 
 class Div(ElementWiseBinary):
-    def __init__(
-        self, name:str,
-        input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
-        input_types:List[TensorType], output_types:List[TensorType],
-        input_constants: List[Optional[np.ndarray]] = [],
-        onnx_node:Optional[onnx.NodeProto] = None,
-    ) -> None:
-        super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants)
+    pass
 
 class Pow(ElementWiseBinary):
-    def __init__(
-        self, name:str,
-        input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
-        input_types:List[TensorType], output_types:List[TensorType],
-        input_constants: List[Optional[np.ndarray]] = [],
-        onnx_node:Optional[onnx.NodeProto] = None,
-    ) -> None:
-        super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants)
+    pass
 
 class Equal(ElementWiseBinary):
-    def __init__(
-        self, name:str,
-        input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
-        input_types:List[TensorType], output_types:List[TensorType],
-        input_constants: List[Optional[np.ndarray]] = [],
-        onnx_node:Optional[onnx.NodeProto] = None,
-    ) -> None:
-        super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants)
+    pass
 
 class Sqrt(ElementWiseUnary):
-    def __init__(
-        self, name:str,
-        input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
-        input_types:List[TensorType], output_types:List[TensorType],
-        input_constants: List[Optional[np.ndarray]] = [],
-        onnx_node:Optional[onnx.NodeProto] = None,
-    ) -> None:
-        super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants)
+    pass
 
 class Erf(ElementWiseUnary):
-    def __init__(
-        self, name:str,
-        input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
-        input_types:List[TensorType], output_types:List[TensorType],
-        input_constants: List[Optional[np.ndarray]] = [],
-        onnx_node:Optional[onnx.NodeProto] = None,
-    ) -> None:
-        super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants)
+    pass
 
 class Where(ElementWise):
-    def __init__(
-        self, name:str,
-        input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
-        input_types:List[TensorType], output_types:List[TensorType],
-        input_constants: List[Optional[np.ndarray]] = [],
-        onnx_node:Optional[onnx.NodeProto] = None,
-    ) -> None:
-        super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants)
+    pass
 
 class Cast(ElementWise):
-    def __init__(
-        self, name:str,
-        input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
-        input_types:List[TensorType], output_types:List[TensorType],
-        input_constants: List[Optional[np.ndarray]] = [],
-        onnx_node:Optional[onnx.NodeProto] = None,
-    ) -> None:
-        super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants)
+    pass

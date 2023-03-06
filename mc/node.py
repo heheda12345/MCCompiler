@@ -22,10 +22,10 @@ class Node:
 
     input_constants: List[np.ndarray]
 
-    def __init__(self, name:str='',
-                 input_nodes:List['IndexNode']=[], output_nodes:List[List['IndexNode']]=[],
-                 input_types:List[TensorType]=[], output_types:List[TensorType]=[],
-                 input_constants:List[np.ndarray]=[]) -> None:
+    def __init__(self, name:str,
+                 input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
+                 input_types:List[TensorType], output_types:List[TensorType],
+                 input_constants:List[np.ndarray]) -> None:
         self.name = name
         self.input_nodes = input_nodes
         self.output_nodes = output_nodes
@@ -57,6 +57,14 @@ class Node:
 
     def __repr__(self) -> str:
         return self.__str__()
+    
+    @classmethod
+    def from_onnx(cls, name:str,
+                 input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
+                 input_types:List[TensorType], output_types:List[TensorType],
+                 input_constants:List[np.ndarray],
+                 onnx_node:onnx.NodeProto) -> Node:
+        return cls(name, input_nodes, output_nodes, input_types, output_types, input_constants)
 
 
 class IndexNode:
