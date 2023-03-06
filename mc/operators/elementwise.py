@@ -16,7 +16,7 @@ class ElementWiseBinary(ElementWise):
 class Add(ElementWiseBinary):
     def __init__(
         self, name:str,
-        input_nodes:List['IndexNode'], output_nodes:List['IndexNode'],
+        input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
         input_types:List[TensorType], output_types:List[TensorType],
         input_constants: List[Optional[np.ndarray]] = [],
         onnx_node:Optional[onnx.NodeProto] = None,
@@ -26,7 +26,7 @@ class Add(ElementWiseBinary):
 class Sub(ElementWiseBinary):
     def __init__(
         self, name:str,
-        input_nodes:List['IndexNode'], output_nodes:List['IndexNode'],
+        input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
         input_types:List[TensorType], output_types:List[TensorType],
         input_constants: List[Optional[np.ndarray]] = [],
         onnx_node:Optional[onnx.NodeProto] = None,
@@ -36,7 +36,7 @@ class Sub(ElementWiseBinary):
 class Mul(ElementWiseBinary):
     def __init__(
         self, name:str,
-        input_nodes:List['IndexNode'], output_nodes:List['IndexNode'],
+        input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
         input_types:List[TensorType], output_types:List[TensorType],
         input_constants: List[Optional[np.ndarray]] = [],
         onnx_node:Optional[onnx.NodeProto] = None,
@@ -46,7 +46,7 @@ class Mul(ElementWiseBinary):
 class Div(ElementWiseBinary):
     def __init__(
         self, name:str,
-        input_nodes:List['IndexNode'], output_nodes:List['IndexNode'],
+        input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
         input_types:List[TensorType], output_types:List[TensorType],
         input_constants: List[Optional[np.ndarray]] = [],
         onnx_node:Optional[onnx.NodeProto] = None,
@@ -56,7 +56,7 @@ class Div(ElementWiseBinary):
 class Pow(ElementWiseBinary):
     def __init__(
         self, name:str,
-        input_nodes:List['IndexNode'], output_nodes:List['IndexNode'],
+        input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
         input_types:List[TensorType], output_types:List[TensorType],
         input_constants: List[Optional[np.ndarray]] = [],
         onnx_node:Optional[onnx.NodeProto] = None,
@@ -66,7 +66,7 @@ class Pow(ElementWiseBinary):
 class Equal(ElementWiseBinary):
     def __init__(
         self, name:str,
-        input_nodes:List['IndexNode'], output_nodes:List['IndexNode'],
+        input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
         input_types:List[TensorType], output_types:List[TensorType],
         input_constants: List[Optional[np.ndarray]] = [],
         onnx_node:Optional[onnx.NodeProto] = None,
@@ -76,7 +76,7 @@ class Equal(ElementWiseBinary):
 class Sqrt(ElementWiseUnary):
     def __init__(
         self, name:str,
-        input_nodes:List['IndexNode'], output_nodes:List['IndexNode'],
+        input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
         input_types:List[TensorType], output_types:List[TensorType],
         input_constants: List[Optional[np.ndarray]] = [],
         onnx_node:Optional[onnx.NodeProto] = None,
@@ -86,7 +86,7 @@ class Sqrt(ElementWiseUnary):
 class Erf(ElementWiseUnary):
     def __init__(
         self, name:str,
-        input_nodes:List['IndexNode'], output_nodes:List['IndexNode'],
+        input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
         input_types:List[TensorType], output_types:List[TensorType],
         input_constants: List[Optional[np.ndarray]] = [],
         onnx_node:Optional[onnx.NodeProto] = None,
@@ -96,7 +96,7 @@ class Erf(ElementWiseUnary):
 class Where(ElementWise):
     def __init__(
         self, name:str,
-        input_nodes:List['IndexNode'], output_nodes:List['IndexNode'],
+        input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
         input_types:List[TensorType], output_types:List[TensorType],
         input_constants: List[Optional[np.ndarray]] = [],
         onnx_node:Optional[onnx.NodeProto] = None,
@@ -106,7 +106,7 @@ class Where(ElementWise):
 class Cast(ElementWise):
     def __init__(
         self, name:str,
-        input_nodes:List['IndexNode'], output_nodes:List['IndexNode'],
+        input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
         input_types:List[TensorType], output_types:List[TensorType],
         input_constants: List[Optional[np.ndarray]] = [],
         onnx_node:Optional[onnx.NodeProto] = None,

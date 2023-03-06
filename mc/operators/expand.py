@@ -7,7 +7,7 @@ import numpy as np
 class Expand(Node):
     def __init__(
         self, name:str,
-        input_nodes:List['IndexNode'], output_nodes:List['IndexNode'],
+        input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
         input_types:List[TensorType], output_types:List[TensorType],
         input_constants: List[Optional[np.ndarray]] = [],
         onnx_node:Optional[onnx.NodeProto] = None,

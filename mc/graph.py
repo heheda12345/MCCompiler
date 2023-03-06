@@ -75,7 +75,7 @@ class Graph:
             graph.outputs.append(node)
 
         for node in graph.nodes.values():
-            assert node.io_all_exist(), f'Node {node.name} has None in input/output'
+            assert node.input_exist(), f'Node {node.name} has None in input'
         return graph
 
 
@@ -85,8 +85,19 @@ class Graph:
     
 
     def add_edge(self, src: IndexNode, dst: IndexNode):
-        src.node.set_output(src, dst)
+        src.node.add_output(src, dst)
         dst.node.set_input(src, dst)
+    
+
+    def get_node(self, name: str) -> Node:
+        return self.nodes[name]
+    
+
+    def fill_out_edges(self):
+        for node in self.nodes.values():
+            for i, input in enumerate(node.inputs):
+                if input is not None:
+                    input.node.add_output(input, IndexNode(node, i))
     
     def __str__(self) -> str:
         return '\n'.join([str(node) for node in self.nodes.values()])

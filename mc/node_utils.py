@@ -11,7 +11,7 @@ def parse_input_from_onnx(
 ):
     return ops.Input(name=onnx_node.name,
                     input_nodes=[],
-                    output_nodes=[None],
+                    output_nodes=[[]],
                     input_types=[],
                     output_types=[ty])
 
@@ -31,7 +31,7 @@ def parse_initializer_from_onnx(
 ):
     return ops.Constant(name=onnx_tensor.name,
                     input_nodes=[],
-                    output_nodes=[None],
+                    output_nodes=[[]],
                     input_types=[],
                     output_types=[ty],
                     value=numpy_helper.to_array(onnx_tensor))
@@ -48,7 +48,7 @@ def parse_op_from_onnx(
     op = getattr(ops, op_type)(
         name=onnx_node.name,
         input_nodes=[None] * len(input_types),
-        output_nodes=[None] * len(output_types),
+        output_nodes=[[] for _ in range(len(output_types))],
         input_types=input_types,
         output_types=output_types,
         input_constants=input_constants,

@@ -15,13 +15,15 @@ class NodeType(enum.Enum):
 class Node:
     name: str
     input_nodes: List['IndexNode']
-    output_nodes: List['IndexNode']
+    output_nodes: List[List['IndexNode']]
 
     input_types: List[TensorType]
     output_types: List[TensorType]
 
+    input_constants: List[np.ndarray]
+
     def __init__(self, name:str='',
-                 input_nodes:List['IndexNode']=[], output_nodes:List['IndexNode']=[],
+                 input_nodes:List['IndexNode']=[], output_nodes:List[List['IndexNode']]=[],
                  input_types:List[TensorType]=[], output_types:List[TensorType]=[],
                  input_constants:List[np.ndarray]=[]) -> None:
         self.name = name
@@ -29,28 +31,28 @@ class Node:
         self.output_nodes = output_nodes
         self.input_types = input_types
         self.output_types = output_types
+        self.input_constants = input_constants
 
-    def io_all_exist(self):
+    def input_exist(self):
         for node in self.input_nodes:
-            if node is None:
-                return False
-        for node in self.output_nodes:
             if node is None:
                 return False
         return True
 
-    def set_input(self, src_node: 'IndexNode', dst_node: 'IndexNode'):
+    def set_input(self, src_node: 'IndexNode', dst_node: 'IndexNode', allow_replace=False):
+        if not allow_replace:
+            assert self.input_nodes[dst_node.index] is None
         self.input_nodes[dst_node.index] = src_node
     
-    def set_output(self, src_node: 'IndexNode', dst_node: 'IndexNode'):
-        self.output_nodes[src_node.index] = dst_node
+    def add_output(self, src_node: 'IndexNode', dst_node: 'IndexNode'):
+        self.output_nodes[src_node.index].append(dst_node)
     
     def parse_op_from_onnx(self, onnx_node: onnx.NodeProto):
         raise NotImplementedError
 
     def __str__(self) -> str:
-        return '{}: {} -> {} | {} -> {}'.format(
-            self.name, self.input_nodes, self.output_nodes, self.input_types, self.output_types
+        return '{}({}): {} -> {} | {} -> {}'.format(
+            self.name, self.__class__.__name__, self.input_nodes, self.output_nodes, self.input_types, self.output_types
         )
 
     def __repr__(self) -> str:

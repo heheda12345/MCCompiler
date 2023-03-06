@@ -40,7 +40,7 @@ class UniMatMul(Node):
 class MatMul(UniMatMul):
     def __init__(
         self, name:str,
-        input_nodes:List['IndexNode'], output_nodes:List['IndexNode'],
+        input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
         input_types:List[TensorType], output_types:List[TensorType],
         input_constants: List[Optional[np.ndarray]] = [],
         onnx_node:Optional[onnx.NodeProto] = None,
@@ -65,7 +65,7 @@ class MatMul(UniMatMul):
 class Gemm(UniMatMul):
     def __init__(
         self, name:str,
-        input_nodes:List['IndexNode'], output_nodes:List['IndexNode'],
+        input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
         input_types:List[TensorType], output_types:List[TensorType],
         input_constants: List[Optional[np.ndarray]] = [],
         onnx_node:Optional[onnx.NodeProto] = None,
