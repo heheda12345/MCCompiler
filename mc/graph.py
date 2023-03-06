@@ -3,6 +3,7 @@ from typing import Dict, Tuple, List
 from mc.types import TensorType
 import mc.node_utils as node_utils
 import onnx
+import numpy as np
 
 class Graph:
     nodes: Dict[str, Node]
@@ -35,6 +36,10 @@ class Graph:
             type_of_tensor[tensor.name] = TensorType.from_onnx_tensor(tensor)
         for tensor in onnx_graph.output:
             type_of_tensor[tensor.name] = TensorType.from_onnx_type(tensor.type)
+        
+        initializers: Dict[str, np.ndarray] = {}
+        for tensor in onnx_graph.initializer:
+            initializers[tensor.name] = onnx.numpy_helper.to_array(tensor)
 
         for onnx_input in onnx_graph.input:
             graph.add_node(node_utils.parse_input_from_onnx(
@@ -48,7 +53,9 @@ class Graph:
             node = node_utils.parse_op_from_onnx(
                 onnx_node,
                 [type_of_tensor[name] for name in onnx_node.input],
-                [type_of_tensor[name] for name in onnx_node.output])
+                [type_of_tensor[name] for name in onnx_node.output],
+                [initializers[name] if name in initializers else None for name in onnx_node.input ]
+            )
             graph.add_node(node)
             for dst_idx, dst_name in enumerate(onnx_node.input):
                 src_name, src_idx = sources[dst_name]

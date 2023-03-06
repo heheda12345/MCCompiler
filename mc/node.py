@@ -1,8 +1,9 @@
 from __future__ import annotations
-from typing import List
+from typing import List, Dict
 from mc.types import TensorType
 import onnx
 import enum
+import numpy as np
 
 class NodeType(enum.Enum):
     input = 1
@@ -21,36 +22,14 @@ class Node:
 
     def __init__(self, name:str='',
                  input_nodes:List['IndexNode']=[], output_nodes:List['IndexNode']=[],
-                 input_types:List[TensorType]=[], output_types:List[TensorType]=[]) -> None:
+                 input_types:List[TensorType]=[], output_types:List[TensorType]=[],
+                 input_constants:List[np.ndarray]=[]) -> None:
         self.name = name
         self.input_nodes = input_nodes
         self.output_nodes = output_nodes
         self.input_types = input_types
         self.output_types = output_types
 
-    # @classmethod
-    # def from_onnx(cls, onnx_node: onnx.NodeProto | onnx.ValueInfoProto | onnx.TensorProto,
-    #               node_type: NodeType,
-    #               input_types: List[TensorType] = None,
-    #               output_types: List[TensorType] = None):
-    #     if node_type == NodeType.input:
-    #         node = operators.Input()
-    #     elif node_type == NodeType.initializer:
-    #         node = operators.Constant()
-    #     elif node_type == NodeType.node:
-    #         print(dir(operators))
-    #         raise NotImplementedError
-    #     elif node_type == NodeType.output:
-    #         node = operators.Output()
-
-    #     node.name = onnx_node.name
-    #     node.type = node_type
-    #     node.input_types = input_types
-    #     node.output_types = output_types
-    #     node.input_nodes = [None] * len(input_types)
-    #     node.output_nodes = [None] * len(output_types)
-    #     return node
-    
     def io_all_exist(self):
         for node in self.input_nodes:
             if node is None:

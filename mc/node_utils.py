@@ -1,8 +1,9 @@
 import mc.operators as ops
 import onnx
-from typing import List
+from typing import List, Optional
 from mc.types import TensorType
 from onnx import numpy_helper
+import numpy as np
 
 def parse_input_from_onnx(
     onnx_node: onnx.ValueInfoProto,
@@ -38,7 +39,8 @@ def parse_initializer_from_onnx(
 def parse_op_from_onnx(
     onnx_node: onnx.TensorProto,
     input_types: List[TensorType],
-    output_types: List[TensorType]
+    output_types: List[TensorType],
+    input_constants: List[Optional[np.ndarray]] = [],
 ):
     op_type = onnx_node.op_type
     if op_type not in dir(ops):
@@ -49,6 +51,7 @@ def parse_op_from_onnx(
         output_nodes=[None] * len(output_types),
         input_types=input_types,
         output_types=output_types,
-        onnx_node=onnx_node
+        input_constants=input_constants,
+        onnx_node=onnx_node,
     )
     return op

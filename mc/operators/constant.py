@@ -11,13 +11,17 @@ class Constant(Node):
         self, name:str,
         input_nodes:List['IndexNode'], output_nodes:List['IndexNode'],
         input_types:List[TensorType], output_types:List[TensorType],
+        input_constants: List[Optional[np.ndarray]] = [],
         onnx_node:Optional[onnx.NodeProto] = None,
         value:Optional[np.ndarray] = None,
     ) -> None:
-        super().__init__(name, input_nodes, output_nodes, input_types, output_types)
-        assert (onnx_node is not None) + (value is not None) == 1
+        super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants)
+        value_is_in_constants = len(input_constants) > 0 and input_constants[0] is not None
+        assert (onnx_node is not None) + (value is not None) + value_is_in_constants == 1
         if onnx_node is not None:
             self.value = numpy_helper.to_array(onnx_node.attribute[0].t)
+        elif value_is_in_constants:
+            self.value = input_constants[0]
         else:
             self.value = value
 
@@ -26,8 +30,7 @@ class ConstantOfShape(Constant):
         self, name:str,
         input_nodes:List['IndexNode'], output_nodes:List['IndexNode'],
         input_types:List[TensorType], output_types:List[TensorType],
+        input_constants: List[Optional[np.ndarray]] = [],
         onnx_node:Optional[onnx.NodeProto] = None,
     ) -> None:
-        value = numpy_helper.to_array(onnx_node.attribute[0].t)
-        value = np.full(output_types[0].shape, value)
-        super().__init__(name, input_nodes, output_nodes, input_types, output_types, value=value)
+        super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants)

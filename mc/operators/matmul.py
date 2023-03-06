@@ -2,7 +2,7 @@ from mc.node import Node, IndexNode
 from typing import List, Optional, Tuple
 from mc.types import TensorType
 import onnx
-
+import numpy as np
 
 class UniMatMul(Node):
     # [size_b, size_m, size_k] * [size_b, size_k, size_n] -> [size_b, size_m, size_n]
@@ -20,13 +20,14 @@ class UniMatMul(Node):
             self, name: str,
             input_nodes: List['IndexNode'], output_nodes: List['IndexNode'],
             input_types: List[TensorType], output_types: List[TensorType],
+            input_constants: List[Optional[np.ndarray]],
             size_b: int, size_m: int, size_n: int, size_k: int,
             input0_stride: Tuple[int, int, int], input1_stride: Tuple[int, int, int], 
             output_stride: Tuple[int, int, int],
             bias_stride: Optional[Tuple[int, int, int]]=None,
             alpha: float = 1.0, beta: float = 0.0,
                 ) -> None:
-        super().__init__(name, input_nodes, output_nodes, input_types, output_types)
+        super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants)
         self.size_b = size_b
         self.size_m = size_m
         self.size_n = size_n
@@ -41,6 +42,7 @@ class MatMul(UniMatMul):
         self, name:str,
         input_nodes:List['IndexNode'], output_nodes:List['IndexNode'],
         input_types:List[TensorType], output_types:List[TensorType],
+        input_constants: List[Optional[np.ndarray]] = [],
         onnx_node:Optional[onnx.NodeProto] = None,
     ) -> None:
         # super().__init__(name, input_nodes, output_nodes, input_types, output_types)
@@ -57,7 +59,7 @@ class MatMul(UniMatMul):
         if len(input_types[1].shape) == 3:
             input1_stride[0] = size_n * size_k
         output_stride = [size_m * size_k, size_k, 1]
-        super().__init__(name, input_nodes, output_nodes, input_types, output_types, size_b, size_m, size_n, size_k, input0_stride, input1_stride, output_stride)
+        super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants, size_b, size_m, size_n, size_k, input0_stride, input1_stride, output_stride)
 
 # [m, k] * [k, n] -> [m, n]
 class Gemm(UniMatMul):
@@ -65,6 +67,7 @@ class Gemm(UniMatMul):
         self, name:str,
         input_nodes:List['IndexNode'], output_nodes:List['IndexNode'],
         input_types:List[TensorType], output_types:List[TensorType],
+        input_constants: List[Optional[np.ndarray]] = [],
         onnx_node:Optional[onnx.NodeProto] = None,
     ) -> None:
         size_b = 1
@@ -87,4 +90,4 @@ class Gemm(UniMatMul):
             input1_stride = [0, size_n, 1]
         bias_stride = [0, 0, 1]
         output_stride = [size_m * size_n, size_n, 1]
-        super().__init__(name, input_nodes, output_nodes, input_types, output_types, size_b, size_m, size_n, size_k, input0_stride, input1_stride, output_stride, bias_stride, alpha, beta)
+        super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants, size_b, size_m, size_n, size_k, input0_stride, input1_stride, output_stride, bias_stride, alpha, beta)
