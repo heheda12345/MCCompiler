@@ -79,11 +79,9 @@ class Graph:
             assert node.input_exist(), f'Node {node.name} has None in input'
         return graph
 
-
     def add_node(self, node: Node):
         assert node.name not in self.nodes, f'Node {node.name} already exists'
         self.nodes[node.name] = node
-    
 
     def add_edge(self, src: IndexNode, dst: IndexNode):
         src.node.add_output(src, dst)
@@ -95,7 +93,7 @@ class Graph:
 
     def get_node(self, name: str) -> Node:
         return self.nodes[name]
-    
+
     def clear_unused_nodes(self):
         used_nodes = {}
         # bfs from the output nodes

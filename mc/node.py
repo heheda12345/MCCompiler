@@ -12,7 +12,15 @@ class NodeType(enum.Enum):
     output = 4
 
 
-node_name_used: Set[str] = set() 
+node_name_used: Set[str] = set()
+
+def gen_name(prefix: str) -> str:
+    i = 0
+    while True:
+        name = f'{prefix}.{i}'
+        if name not in node_name_used:
+            return name
+        i += 1
 
 class Node:
     name: str
@@ -66,9 +74,12 @@ class Node:
         raise NotImplementedError
 
     def __str__(self) -> str:
-        return '{}({}): {} -> {} | {} -> {}'.format(
-            self.name, self.__class__.__name__, self.input_nodes, self.output_nodes, self.input_types, self.output_types
+        return '{}({}): {} -> {}'.format(
+            self.name, self.__class__.__name__, self.input_nodes, self.output_nodes
         )
+        # return '{}({}): {} -> {} | {} -> {}'.format(
+            # self.name, self.__class__.__name__, self.input_nodes, self.output_nodes, self.input_types, self.output_types
+        # )
 
     def __repr__(self) -> str:
         return self.__str__()
