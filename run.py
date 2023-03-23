@@ -1,6 +1,8 @@
 from mc import compile
 import onnx
 import sys
+import logging
+logging.basicConfig(level=logging.INFO)
 
 def main():
     with open(sys.argv[1], 'rb') as f:

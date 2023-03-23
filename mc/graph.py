@@ -4,6 +4,7 @@ from mc.types import TensorType
 import mc.node_utils as node_utils
 import onnx
 import numpy as np
+import logging
 
 class Graph:
     nodes: Dict[str, Node]
@@ -88,10 +89,32 @@ class Graph:
         src.node.add_output(src, dst)
         dst.node.set_input(src, dst)
     
+    def remove_node_input_and_edge(self, node: Node, index: int):
+        node.input_nodes[index].node.remove_output_edge(node.input_nodes[index].index, node.name)
+        node.remove_input(index)
 
     def get_node(self, name: str) -> Node:
         return self.nodes[name]
     
+    def clear_unused_nodes(self):
+        used_nodes = {}
+        # bfs from the output nodes
+        queue = self.outputs.copy()
+        while len(queue) > 0:
+            node = queue.pop()
+            used_nodes[node.name] = node
+            for input in node.input_nodes:
+                assert input is not None
+                if input.node not in used_nodes:
+                    queue.append(input.node)
+        for node in self.inputs:
+            used_nodes[node.name] = node
+
+        # print unused nodes
+        for node in self.nodes.values():
+            if node.name not in used_nodes:
+                logging.info(f'remove unused node: {node.name}')
+        self.nodes = used_nodes
 
     def fill_out_edges(self):
         for node in self.nodes.values():

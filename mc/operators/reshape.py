@@ -5,4 +5,6 @@ import onnx
 import numpy as np
 
 class Reshape(Node):
-    pass
+    @classmethod
+    def unused_onnx_inputs(cls):
+        return [1]

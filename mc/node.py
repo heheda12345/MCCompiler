@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List, Dict
+from typing import List, Dict, Set
 from mc.types import TensorType
 import onnx
 import enum
@@ -11,6 +11,8 @@ class NodeType(enum.Enum):
     node = 3
     output = 4
 
+
+node_name_used: Set[str] = set() 
 
 class Node:
     name: str
@@ -26,6 +28,9 @@ class Node:
                  input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
                  input_types:List[TensorType], output_types:List[TensorType],
                  input_constants:List[np.ndarray]) -> None:
+        if name in node_name_used:
+            raise ValueError(f'Node name {name} is already used')
+        node_name_used.add(name)
         self.name = name
         self.input_nodes = input_nodes
         self.output_nodes = output_nodes
@@ -47,6 +52,16 @@ class Node:
     def add_output(self, src_node: 'IndexNode', dst_node: 'IndexNode'):
         self.output_nodes[src_node.index].append(dst_node)
     
+    def remove_output_edge(self, output_idx: int, dst_name: str):
+        prev_size = len(self.output_nodes[output_idx])
+        self.output_nodes[output_idx] = [idx_node for idx_node in self.output_nodes[output_idx] if idx_node.node.name != dst_name]
+        if prev_size == len(self.output_nodes[output_idx]):
+            raise ValueError(f'{dst_name} not found in the {output_idx}-th output of {self}')
+    
+    def remove_input(self, input_idx: int):
+        assert input_idx == len(self.input_nodes) - 1, 'Only support remove last input now'
+        self.input_nodes.pop()
+
     def parse_op_from_onnx(self, onnx_node: onnx.NodeProto):
         raise NotImplementedError
 
@@ -65,6 +80,10 @@ class Node:
                  input_constants:List[np.ndarray],
                  onnx_node:onnx.NodeProto) -> Node:
         return cls(name, input_nodes, output_nodes, input_types, output_types, input_constants)
+
+    @classmethod
+    def unused_onnx_inputs(cls) -> List[int]:
+        return []
 
 
 class IndexNode:
