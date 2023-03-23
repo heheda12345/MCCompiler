@@ -77,10 +77,6 @@ class PatternToNode(Optimization):
             if matched_nodes is None:
                 break
             else:
-                print("match found:")
-                for k, v in matched_nodes.items():
-                    print(f"{k}: {v}")
-                print("========================")
                 new_node = self.new_node_from_matched_nodes(
                     {k[len(self.pattern_name)+1:]: v for k, v in matched_nodes.items()}
                 )
@@ -95,7 +91,6 @@ class PatternToNode(Optimization):
                                 continue
                             edge_src = inp
                             edge_dst = IndexNode(new_node, self.input_idx[p_inp.node.name])
-                            print("new_edge", edge_src.node.name, edge_src.index, edge_dst.node.name, edge_dst.index)
                             inp.node.add_output(edge_src, edge_dst)
                             new_node.set_input(edge_src, edge_dst)
                             processed_node.add(inp.node.name)
@@ -106,14 +101,12 @@ class PatternToNode(Optimization):
                         p_src_index_node = p_node.input_nodes[0]
                         old_edge_src = IndexNode(matched_nodes[p_src_index_node.node.name], p_src_index_node.index)
                         for dst in old_edge_src.node.output_nodes[old_edge_src.index]:
-                            print("new_edge", new_edge_src.node.name, new_edge_src.index, dst.node.name, dst.index)
                             new_edge_dst = IndexNode(dst.node, dst.index)
                             new_edge_src.node.add_output(new_edge_src, new_edge_dst)
                             dst.node.set_input(new_edge_src, new_edge_dst, allow_replace=True)
                             new_edge_src.node.output_types[new_edge_src.index] = dst.node.input_types[new_edge_dst.index]
                             old_edge_src.node.remove_output_edge(old_edge_src.index, dst.node.name)
             graph.clear_unused_nodes()
-            logging.info(f"[{self.__class__.__name__}] after replace \n" + str(graph) + "\n===================")
 
 
 class MatchLayerNorm(PatternToNode):

@@ -114,13 +114,46 @@ class Graph:
                 logging.info(f'remove unused node: {node.name}')
         self.nodes = used_nodes
 
+        # filter unused edges
+        for node in self.nodes.values():
+            for i, output_node in enumerate(node.output_nodes):
+                output_node = [o for o in output_node if o.node.name in used_nodes]
+                node.output_nodes[i] = output_node
+
     def fill_out_edges(self):
         for node in self.nodes.values():
             for i, input in enumerate(node.inputs):
                 if input is not None:
                     input.node.add_output(input, IndexNode(node, i))
     
+    def topological_sort(self):
+        # topolic sort
+        queue = []
+        for node in self.nodes.values():
+            if len(node.input_nodes) == 0:
+                queue.append(node)
+        remain_degree = {}
+        for node in self.nodes.values():
+            remain_degree[node.name] = len(node.input_nodes)
+        sorted_nodes = []
+        while len(queue) > 0:
+            node = queue.pop()
+            sorted_nodes.append(node)
+            for output in node.output_nodes:
+                for o in output:
+                    remain_degree[o.node.name] -= 1
+                    if remain_degree[o.node.name] == 0:
+                        queue.append(o.node)
+        if len(sorted_nodes) != len(self.nodes):
+            raise RuntimeError('Graph is not a DAG')
+        return sorted_nodes
+    
+    def str_in_topological_order(self):
+        sorted_nodes = self.topological_sort()
+        return '\n'.join([str(node) for node in sorted_nodes])
+    
     def __str__(self) -> str:
         return '\n'.join([str(node) for node in self.nodes.values()])
+
 
     
