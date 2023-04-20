@@ -2,7 +2,7 @@ from .constant import Constant, ConstantOfShape
 from .input import Input
 from .output import Output
 from .transpose import Transpose
-from .matmul import MatMul, Gemm
+from .matmul import MatMul, Gemm, UniMatMul
 from .elementwise import Add, Sub, Mul, Div, Sqrt, Pow, Equal, Where, Cast, Erf, AddUni, PowUni, MulUni, DivUni, GELU
 from .split import Split
 from .reshape import Reshape

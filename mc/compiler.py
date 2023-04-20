@@ -8,4 +8,5 @@ def compile(model_onnx):
     RemoveUnusedOnnxInput().apply(graph)
     MatchLayerNorm().apply(graph)
     MatchGELU().apply(graph)
+    MatchCublasEPILOGUE().apply(graph)
     logging.info("after compile\n" + graph.str_in_topological_order())
