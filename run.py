@@ -2,7 +2,9 @@ from mc import compile
 import onnx
 import sys
 import logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    format='%(levelname)s [%(filename)s:%(lineno)d] %(message)s',
+    level=logging.INFO)
 
 def main():
     with open(sys.argv[1], 'rb') as f:

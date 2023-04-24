@@ -90,6 +90,17 @@ class Graph:
     def remove_node_input_and_edge(self, node: Node, index: int):
         node.input_nodes[index].node.remove_output_edge(node.input_nodes[index].index, node.name)
         node.remove_input(index)
+    
+    def remove_node(self, node: Node):
+        assert len(node.input_nodes) == 1
+        assert len(node.output_nodes) == 1
+        assert node.input_types[0].size() == node.output_types[0].size()
+        src_node = node.input_nodes[0].node
+        dst_nodes = node.output_nodes[0]
+        src_node.remove_output_edge(node.input_nodes[0].index, node.name)
+        src_node.add_output(node.input_nodes[0], dst_nodes[0])
+        for dst_node in dst_nodes:
+            dst_node.node.input_nodes[dst_node.index] = IndexNode(src_node, node.input_nodes[0].index)
 
     def get_node(self, name: str) -> Node:
         return self.nodes[name]

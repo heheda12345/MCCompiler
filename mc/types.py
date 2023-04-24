@@ -32,6 +32,9 @@ class TensorType:
         out = cls(shape, onnx_ty)
         return out
 
+    def size(self) -> int:
+        return np.prod(self.shape)
+
     def __str__(self) -> str:
         return '({}, {})'.format(self.shape, self.dtype)
     

@@ -30,8 +30,7 @@ class UniMatMul(Node):
     size_m: int
     size_n: int
     size_k: int
-    input0_stride: Tuple[int, int, int]
-    input1_stride: Tuple[int, int, int]
+    input_stride: List[Tuple[int, int, int]] # with length 2
     bias_stride: Tuple[int, int, int]
     output_stride: Tuple[int, int, int]
     alpha: float
@@ -39,7 +38,7 @@ class UniMatMul(Node):
     epilogue: Epilogue
     def __init__(
             self, name: str,
-            input_nodes: List['IndexNode'], output_nodes: List[List['IndexNode']],
+            input_nodes: List[IndexNode], output_nodes: List[List[IndexNode]],
             input_types: List[TensorType], output_types: List[TensorType],
             input_constants: List[Optional[np.ndarray]],
             size_b: int = -1, size_m: int = -1, size_n: int = -1, size_k: int = -1,
@@ -49,13 +48,13 @@ class UniMatMul(Node):
             alpha: float = 1.0, beta: float = 0.0,
             epilogue: Epilogue = Epilogue.CUBLASLT_EPILOGUE_DEFAULT,
         ) -> None:
+        print("matmul: alpha=", alpha, name)
         super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants)
         self.size_b = size_b
         self.size_m = size_m
         self.size_n = size_n
         self.size_k = size_k
-        self.input0_stride = input0_stride
-        self.input1_stride = input1_stride
+        self.input_stride = [input0_stride, input1_stride]
         self.output_stride = output_stride
         self.bias_stride = bias_stride
         self.alpha = alpha
@@ -64,27 +63,42 @@ class UniMatMul(Node):
 
 
     @classmethod
-    def copy_attr_from(cls, node: 'UniMatMul', has_bias=False) -> 'UniMatMul':
-        if has_bias:
-            num_inputs = 3
-        else:
-            num_inputs = 2
+    def copy_attr_from(cls, node: 'UniMatMul', num_inputs = -1) -> 'UniMatMul':
+        if num_inputs == -1:
+            num_inputs = len(node.input_nodes)
 
         return cls(
             gen_name('UniMatMul'), [None] * num_inputs, [[]], [None] * num_inputs, [None], [],
             node.size_b, node.size_m, node.size_n, node.size_k,
-            node.input0_stride, node.input1_stride, node.output_stride,
+            node.input_stride[0], node.input_stride[1], node.output_stride, node.bias_stride,
             node.alpha, node.beta, node.epilogue
         )
 
     def __str__(self) -> str:
         s = super().__str__()
+        attrs = []
         if self.epilogue != Epilogue.CUBLASLT_EPILOGUE_DEFAULT:
-            s += f'(epilogue={self.epilogue.name})'
+            attrs.append(f'epilogue={self.epilogue.name}')
+        if self.alpha != 1.0:
+            attrs.append(f'alpha={self.alpha}')
+        if len(attrs) > 0:
+            s = s + ' (' + ', '.join(attrs) + ')'
         return s
 
 
-class MatMul(UniMatMul):
+class UniMatMulNoBias(UniMatMul):
+    def __init__(self, name: str,
+                 input_nodes: List[IndexNode], output_nodes: List[List[IndexNode]],
+                 input_types: List[TensorType], output_types: List[TensorType],
+                 input_constants: List[Optional[np.ndarray]],
+                 size_b: int = -1, size_m: int = -1, size_n: int = -1, size_k: int = -1,
+                 input0_stride: Tuple[int, int, int] = (0, 0, 0), input1_stride: Tuple[int, int, int] = (0, 0, 0), output_stride: Tuple[int, int, int] = (0, 0, 0),
+                 alpha: float = 1.0, beta: float = 0.0, epilogue: Epilogue = Epilogue.CUBLASLT_EPILOGUE_DEFAULT) -> None:
+        super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants, size_b, size_m, size_n, size_k, input0_stride, input1_stride, output_stride, None, alpha, beta, epilogue)
+
+
+
+class MatMul(UniMatMulNoBias):
     def __init__(
         self, name:str,
         input_nodes:List['IndexNode'], output_nodes:List[List['IndexNode']],
@@ -98,10 +112,10 @@ class MatMul(UniMatMul):
         size_m = input_types[0].shape[-2]
         size_k = input_types[0].shape[-1]
         size_n = input_types[1].shape[-1]
-        input0_stride = [0, size_n, 1]
+        input0_stride = [0, size_k, 1]
         if len(input_types[0].shape) == 3:
-            input0_stride[0] = size_m * size_n
-        input1_stride = [0, size_k, 1]
+            input0_stride[0] = size_m * size_k
+        input1_stride = [0, size_n, 1]
         if len(input_types[1].shape) == 3:
             input1_stride[0] = size_n * size_k
         output_stride = [size_m * size_k, size_k, 1]

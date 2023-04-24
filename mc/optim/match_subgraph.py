@@ -2,7 +2,7 @@ from .optimization import Optimization
 from mc.graph import Graph
 from mc.node import Node, IndexNode, gen_name
 import mc.operators as ops
-from typing import Dict, List, Set, Type
+from typing import Dict, List, Type
 import logging
 import math
 
@@ -167,63 +167,3 @@ class MatchGELU(PatternToNode):
 
     def is_match(self, node: Node, name_in_pattern: str):
         return isinstance(node, self.pattern[name_in_pattern].__class__)
-
-
-class Match_CUBLASLT_EPILOGUE_GELU_BIAS(PatternToNode):
-    def __init__(self):
-        super().__init__(self.__class__.__name__)
-        self.add_node_to_pattern(ops.Input, "input.0", [])
-        self.add_node_to_pattern(ops.Input, "input.1", [])
-        self.add_node_to_pattern(ops.Input, "input.bias", [])
-        self.add_node_to_pattern(ops.UniMatMul, "matmul.0", ["input.0", "input.1"], )
-        self.add_node_to_pattern(ops.Add, "add.0", ["input.bias", "matmul.0"])
-        self.add_node_to_pattern(ops.GELU, "gelu.0", ["add.0"])
-        self.add_node_to_pattern(ops.Output, "output", ["gelu.0"])
-    
-    def new_node_from_matched_nodes(self, matched_nodes: Dict[str, Node]):
-        new_node = ops.UniMatMul.copy_attr_from(matched_nodes["matmul.0"], has_bias=True)
-        new_node.epilogue = ops.matmul.Epilogue.CUBLASLT_EPILOGUE_GELU_BIAS
-        return new_node
-    
-    def is_match(self, node: Node, name_in_pattern: str):
-        if name_in_pattern == "add.0":
-            if not isinstance(node, ops.Add): return False
-            bias_shape = node.input_types[1].shape
-            return len(bias_shape) == 1
-        return isinstance(node, self.pattern[name_in_pattern].__class__)
-
-class Match_CUBLASLT_EPILOGUE_BIAS(PatternToNode):
-    def __init__(self):
-        super().__init__(self.__class__.__name__)
-        self.add_node_to_pattern(ops.Input, "input.0", [])
-        self.add_node_to_pattern(ops.Input, "input.1", [])
-        self.add_node_to_pattern(ops.Input, "input.bias", [])
-        self.add_node_to_pattern(ops.UniMatMul, "matmul.0", ["input.0", "input.1"], )
-        self.add_node_to_pattern(ops.Add, "add.0", ["input.bias", "matmul.0"])
-        self.add_node_to_pattern(ops.Output, "output", ["add.0"])
-    
-    def new_node_from_matched_nodes(self, matched_nodes: Dict[str, Node]):
-        new_node = ops.UniMatMul.copy_attr_from(matched_nodes["matmul.0"], has_bias=True)
-        new_node.epilogue = ops.matmul.Epilogue.CUBLASLT_EPILOGUE_BIAS
-        return new_node
-    
-    def is_match(self, node: Node, name_in_pattern: str):
-        if name_in_pattern == "add.0":
-            if not isinstance(node, ops.Add): return False
-            bias_shape = node.input_types[1].shape
-            return len(bias_shape) == 1
-        return isinstance(node, self.pattern[name_in_pattern].__class__)
-
-
-class MatchCublasEPILOGUE(Optimization):
-    def __init__(self):
-        super().__init__()
-    
-    def apply(self, graph: Graph):
-        # from complex patterns to simple patterns
-        pattern_to_node = [
-            Match_CUBLASLT_EPILOGUE_GELU_BIAS(),
-            Match_CUBLASLT_EPILOGUE_BIAS(),
-        ]
-        for ptn in pattern_to_node:
-            ptn.apply(graph)
