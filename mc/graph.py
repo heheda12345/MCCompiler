@@ -91,10 +91,13 @@ class Graph:
         node.input_nodes[index].node.remove_output_edge(node.input_nodes[index].index, node.name)
         node.remove_input(index)
     
-    def remove_node(self, node: Node):
-        assert len(node.input_nodes) == 1
-        assert len(node.output_nodes) == 1
-        assert node.input_types[0].size() == node.output_types[0].size()
+    def remove_node(self, node: Node, check=True):
+        if check:
+            assert len(node.input_nodes) == 1
+            assert len(node.output_nodes) == 1
+            assert node.input_types[0].size() == node.output_types[0].size()
+        else:
+            logging.warning(f'Node {node.name} is removed without checking')
         src_node = node.input_nodes[0].node
         dst_nodes = node.output_nodes[0]
         src_node.remove_output_edge(node.input_nodes[0].index, node.name)

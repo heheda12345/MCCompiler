@@ -33,9 +33,12 @@ class UniMatMul(Node):
     input_stride: List[Tuple[int, int, int]] # with length 2
     bias_stride: Tuple[int, int, int]
     output_stride: Tuple[int, int, int]
+    input_offset: List[int]
+    output_offset: int
     alpha: float
     beta: float
     epilogue: Epilogue
+
     def __init__(
             self, name: str,
             input_nodes: List[IndexNode], output_nodes: List[List[IndexNode]],
@@ -47,6 +50,7 @@ class UniMatMul(Node):
             bias_stride: Optional[Tuple[int, int, int]]=None,
             alpha: float = 1.0, beta: float = 0.0,
             epilogue: Epilogue = Epilogue.CUBLASLT_EPILOGUE_DEFAULT,
+            input_offset: List[int] = [0, 0, 0], output_offset: int = 0,
         ) -> None:
         print("matmul: alpha=", alpha, name)
         super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants)
@@ -57,9 +61,12 @@ class UniMatMul(Node):
         self.input_stride = [input0_stride, input1_stride]
         self.output_stride = output_stride
         self.bias_stride = bias_stride
+        assert isinstance(input_offset, list)
         self.alpha = alpha
         self.beta = beta
         self.epilogue = epilogue
+        self.input_offset = input_offset
+        self.output_offset = output_offset
 
 
     @classmethod
@@ -74,13 +81,18 @@ class UniMatMul(Node):
             node.alpha, node.beta, node.epilogue
         )
 
+
     def __str__(self) -> str:
         s = super().__str__()
         attrs = []
+        attrs.append('input_stride=' + str(self.input_stride))
         if self.epilogue != Epilogue.CUBLASLT_EPILOGUE_DEFAULT:
             attrs.append(f'epilogue={self.epilogue.name}')
         if self.alpha != 1.0:
             attrs.append(f'alpha={self.alpha}')
+        for i in range(len(self.input_offset)):
+            if self.input_offset[i] != 0:
+                attrs.append(f'input_offset[{i}]={self.input_offset[i]}')
         if len(attrs) > 0:
             s = s + ' (' + ', '.join(attrs) + ')'
         return s
@@ -93,8 +105,9 @@ class UniMatMulNoBias(UniMatMul):
                  input_constants: List[Optional[np.ndarray]],
                  size_b: int = -1, size_m: int = -1, size_n: int = -1, size_k: int = -1,
                  input0_stride: Tuple[int, int, int] = (0, 0, 0), input1_stride: Tuple[int, int, int] = (0, 0, 0), output_stride: Tuple[int, int, int] = (0, 0, 0),
-                 alpha: float = 1.0, beta: float = 0.0, epilogue: Epilogue = Epilogue.CUBLASLT_EPILOGUE_DEFAULT) -> None:
-        super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants, size_b, size_m, size_n, size_k, input0_stride, input1_stride, output_stride, None, alpha, beta, epilogue)
+                 alpha: float = 1.0, beta: float = 0.0, epilogue: Epilogue = Epilogue.CUBLASLT_EPILOGUE_DEFAULT,
+                 input_offset: List[int] = [0, 0], output_offset: int = 0,) -> None:
+        super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants, size_b, size_m, size_n, size_k, input0_stride, input1_stride, output_stride, None, alpha, beta, epilogue, input_offset, output_offset)
 
 
 
@@ -152,4 +165,4 @@ class Gemm(UniMatMul):
             input1_stride = [0, size_n, 1]
         bias_stride = [0, 0, 1]
         output_stride = [size_m * size_n, size_n, 1]
-        return cls(name, input_nodes, output_nodes, input_types, output_types, input_constants, size_b, size_m, size_n, size_k, input0_stride, input1_stride, output_stride, bias_stride, alpha, beta)
+        return cls(name, input_nodes, output_nodes, input_types, output_types, input_constants, size_b, size_m, size_n, size_k, input0_stride, input1_stride, output_stride, bias_stride, alpha=alpha, beta=beta)

@@ -5,6 +5,7 @@ from mc.node import Node
 import mc.operators as ops
 from typing import List
 import logging
+import numpy as np
 
 class MergeLinearELmenentWise(Optimization):
     # b = a / 8
@@ -58,7 +59,6 @@ def stride_to_perm(stride: List[int], shape: List[int]):
             perm.append(shape_stride.index(s))
         else:
             raise ValueError("stride not match shape")
-    print("perm_from_stride", stride, shape, "=>", perm)
     return perm
 
 
@@ -70,7 +70,6 @@ class MergeTranspose(Optimization):
                 and isinstance(node.output_nodes[0][0].node, ops.UniMatMul):
                 input_idx = node.output_nodes[0][0].index
                 matmul_node = node.output_nodes[0][0].node
-                print("matmul_node:", matmul_node, input_idx)
                 if input_idx == 0 or input_idx == 1:
                     old_stride = matmul_node.input_stride[input_idx]
                     old_perm = stride_to_perm(matmul_node.input_stride[input_idx], matmul_node.input_types[input_idx].shape)
@@ -89,6 +88,30 @@ class MergeTranspose(Optimization):
                     continue
         graph.clear_unused_nodes()
 
+class MergeSlice(Optimization):
+    def apply(self, graph):
+        for node in graph.nodes.values():
+            if isinstance(node, ops.Slice) \
+                and len(node.output_nodes[0]) == 1 \
+                and isinstance(node.output_nodes[0][0].node, ops.UniMatMul):
+                if len(node.axes) != 1: continue
+                if node.steps[0] != 1: raise NotImplementedError
+                slice_node = node
+                input_idx = slice_node.output_nodes[0][0].index
+                matmul_node: ops.UniMatMul = slice_node.output_nodes[0][0].node
+                if input_idx == 0 or input_idx == 1:
+                    old_stride = matmul_node.input_stride[input_idx]
+                    perm = stride_to_perm(matmul_node.input_stride[input_idx], matmul_node.input_types[input_idx].shape)
+                    new_stride = perm_to_stride(perm, slice_node.input_types[0].shape)
+                    offset = np.prod(np.array(slice_node.input_types[0].shape[slice_node.axes[0] + 1:], dtype=np.int64)) * slice_node.starts[0]
+                    matmul_node.input_stride[input_idx] = new_stride
+                    matmul_node.input_types[input_idx] = slice_node.input_types[0]
+                    matmul_node.input_offset[input_idx] += offset
+                    logging.info(f"{matmul_node.name}: change input{input_idx} stride from {old_stride} to {new_stride} & add {offset} to offset due to slice {slice_node.starts[0]}:{slice_node.ends[0]}:{slice_node.steps[0]}")
+                    graph.remove_node(slice_node, check=False)
+                else:
+                    continue
+        graph.clear_unused_nodes()
 
 class MatchCublasPROLOGUE(Optimization):
     def __init__(self):
@@ -100,6 +123,7 @@ class MatchCublasPROLOGUE(Optimization):
         passes = [
             MergeLinearELmenentWise(),
             MergeTranspose(),
+            MergeSlice(),
         ]
         for ptn in passes:
             ptn.apply(graph)
