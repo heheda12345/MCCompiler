@@ -88,6 +88,7 @@ class MergeTranspose(Optimization):
                     continue
         graph.clear_unused_nodes()
 
+
 class MergeSlice(Optimization):
     def apply(self, graph):
         for node in graph.nodes.values():
@@ -112,6 +113,7 @@ class MergeSlice(Optimization):
                 else:
                     continue
         graph.clear_unused_nodes()
+
 
 class MatchCublasPROLOGUE(Optimization):
     def __init__(self):

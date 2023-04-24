@@ -1,5 +1,6 @@
 from mc.graph import Graph
 from mc.optim import *
+from mc.codegen import codegen
 import logging
 
 def compile(model_onnx):
@@ -12,3 +13,5 @@ def compile(model_onnx):
     MatchCublasEPILOGUE().apply(graph)
     MatchCublasPROLOGUE().apply(graph)
     logging.info("after compile\n" + graph.str_in_topological_order())
+
+    codegen(graph)

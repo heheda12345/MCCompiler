@@ -96,6 +96,9 @@ class Node:
     def unused_onnx_inputs(cls) -> List[int]:
         return []
 
+    def get_cuda_code(self, func_sig) -> str:
+        raise NotImplementedError
+
 
 class IndexNode:
     index: int

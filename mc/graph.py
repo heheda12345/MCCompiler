@@ -140,9 +140,9 @@ class Graph:
                 if input is not None:
                     input.node.add_output(input, IndexNode(node, i))
     
-    def topological_sort(self):
+    def topological_sort(self) -> List[Node]:
         # topolic sort
-        queue = []
+        queue: List[Node] = []
         for node in self.nodes.values():
             if len(node.input_nodes) == 0:
                 queue.append(node)

@@ -4,6 +4,8 @@ from mc.types import TensorType
 import onnx
 import numpy as np
 import enum
+import copy
+from mc.utils import CodeWriter
 
 # https://docs.nvidia.com/cuda/cublas/index.html#cublasltepilogue-t
 class Epilogue(enum.Enum):
@@ -65,7 +67,7 @@ class UniMatMul(Node):
         self.alpha = alpha
         self.beta = beta
         self.epilogue = epilogue
-        self.input_offset = input_offset
+        self.input_offset = copy.deepcopy(input_offset)
         self.output_offset = output_offset
 
 
@@ -81,6 +83,13 @@ class UniMatMul(Node):
             node.alpha, node.beta, node.epilogue
         )
 
+    def get_cuda_code(self, func_sig) -> str:
+        writer = CodeWriter()
+        writer.wl(func_sig)
+        writer.block_start()
+        writer.wl('// TODO')
+        writer.block_end()
+        return writer.get_code()
 
     def __str__(self) -> str:
         s = super().__str__()
