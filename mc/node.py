@@ -99,6 +99,9 @@ class Node:
     def get_cuda_code(self, func_sig) -> str:
         return func_sig + " {\n    // TODO\n}\n"
 
+    def get_constant_tensors(self, node_name) -> Dict[str, np.ndarray]:
+        return {}
+
 
 class IndexNode:
     index: int
