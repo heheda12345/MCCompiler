@@ -8,10 +8,14 @@ import os
 
 class CodeGen(CodeWriter):
     name_dict: Dict[str, str]
-    def __init__(self, graph: Graph):
+    codegen_dir: str
+    data_dir: str
+    def __init__(self, graph: Graph, codegen_dir, data_dir):
         super().__init__()
         self.graph = graph
         self.name_dict = {}
+        self.codegen_dir = codegen_dir
+        self.data_dir = data_dir
 
     def node_name(self, node: Node):
         if node.name not in self.name_dict:
@@ -33,6 +37,39 @@ class CodeGen(CodeWriter):
 #include <cstdlib>
 #include <string>
 #include <fstream>
+#include <cuda.h>
+#include <cublas_v2.h>
+
+#define UNREACHABLE() { \
+    printf("file %s line %i: unreachable!\n", __FILE__, __LINE__); \
+    fflush(stdout); \
+    exit(1); \
+}
+
+static const char *cublasGetErrorString(cublasStatus_t error) {
+    switch (error)
+    {
+        case CUBLAS_STATUS_SUCCESS:
+            return "CUBLAS_STATUS_SUCCESS";
+        case CUBLAS_STATUS_NOT_INITIALIZED:
+            return "CUBLAS_STATUS_NOT_INITIALIZED";
+        case CUBLAS_STATUS_ALLOC_FAILED:
+            return "CUBLAS_STATUS_ALLOC_FAILED";
+        case CUBLAS_STATUS_INVALID_VALUE:
+            return "CUBLAS_STATUS_INVALID_VALUE";
+        case CUBLAS_STATUS_ARCH_MISMATCH:
+            return "CUBLAS_STATUS_ARCH_MISMATCH";
+        case CUBLAS_STATUS_MAPPING_ERROR:
+            return "CUBLAS_STATUS_MAPPING_ERROR";
+        case CUBLAS_STATUS_EXECUTION_FAILED:
+            return "CUBLAS_STATUS_EXECUTION_FAILED";
+        case CUBLAS_STATUS_INTERNAL_ERROR:
+            return "CUBLAS_STATUS_INTERNAL_ERROR";
+        default:
+            return "<unknown>";
+    }
+    UNREACHABLE()
+}
 
 #define checkCudaErrors(stmt) {                                 \
     cudaError_t err = stmt;                            \
@@ -50,13 +87,20 @@ class CodeGen(CodeWriter):
     } \
 }
 
-void load_tensor(std::string f_name, void* buffer, size_t size) {
+void load_tensor(std::string f_name, void* buffer, size_t size, bool on_gpu=true) {
     std::ifstream f(f_name.c_str(), std::ios::in | std::ios::binary);
     if (!f.is_open()) {
         fprintf(stderr, "Cannot open file %s", f_name.c_str());
         exit(1);
     }
-    f.read((char*)buffer, size);
+    if (on_gpu) {
+        void* tmp_buffer = malloc(size);
+        f.read((char*)tmp_buffer, size);
+        checkCudaErrors(cudaMemcpy(buffer, tmp_buffer, size, cudaMemcpyHostToDevice));
+        free(tmp_buffer);
+    } else {
+        f.read((char*) buffer, size);
+    }
     f.close();
 }
     '''
@@ -137,11 +181,19 @@ void load_tensor(std::string f_name, void* buffer, size_t size) {
         self.wl('init();')
         for i, node in enumerate(self.graph.inputs):
             assert isinstance(node, ops.Input)
+            size = node.output_types[0].size() * node.output_types[0].dtype.itemsize
             self.wl(f'{cpp_type(node.output_types[0].dtype)}* {self.tensor_name(IndexNode(node, 0))}; // input{i}')
-            self.wl(f'load_tensor("{self.tensor_name(IndexNode(node, 0))}.bin", {self.tensor_name(IndexNode(node, 0))}, {node.output_types[0].size() * node.output_types[0].dtype.itemsize});')
+            self.wl(f'checkCudaErrors(cudaMalloc(&{self.tensor_name(IndexNode(node, 0))}, {size}));')
+            self.wl(f'load_tensor("{os.path.join(self.data_dir, f"input{i}")}.bin", {self.tensor_name(IndexNode(node, 0))}, {size});')
         for i, node in enumerate(self.graph.outputs):
             assert isinstance(node, ops.Output)
+            size = node.input_types[0].size() * node.input_types[0].dtype.itemsize
             self.wl(f'{cpp_type(node.input_types[0].dtype)}* {self.tensor_name(node.input_nodes[0])}; // output{i}')
+            self.wl(f'{cpp_type(node.input_types[0].dtype)}* {self.tensor_name(node.input_nodes[0])}_ref;')
+            self.wl(f'{cpp_type(node.input_types[0].dtype)}* {self.tensor_name(node.input_nodes[0])}_cpu;')
+            self.wl(f'{self.tensor_name(node.input_nodes[0])}_ref = ({cpp_type(node.input_types[0].dtype)}*) malloc({size});')
+            self.wl(f'{self.tensor_name(node.input_nodes[0])}_cpu = ({cpp_type(node.input_types[0].dtype)}*) malloc({size});')
+            self.wl(f'load_tensor("{os.path.join(self.data_dir, f"output{i}")}.bin", {self.tensor_name(node.input_nodes[0])}_ref, {size}, false);')
         self.wl('run(' + ', '.join([self.tensor_name(IndexNode(node, 0)) for node in self.graph.inputs] + [self.tensor_name(node.input_nodes[0]) for node in self.graph.outputs]) + ');')
         self.wl('return 0;')
         self.block_end()
@@ -153,12 +205,13 @@ void load_tensor(std::string f_name, void* buffer, size_t size) {
         self.write_test_code()
 
 
-def codegen(graph):
-    writer = CodeGen(graph)
+def codegen(graph, codegen_dir, data_dir):
+    writer = CodeGen(graph, codegen_dir, data_dir)
     writer.write_code()
     print(writer.code_str)
-    with open('tmp/test.cu', 'w') as f:
+    os.makedirs(codegen_dir, exist_ok=True)
+    with open(os.path.join(codegen_dir, 'gen.cu'), 'w') as f:
         f.write(writer.code_str)
-    os.system('nvcc -std=c++11 -arch=sm_70 -O3 -o tmp/test tmp/test.cu')
+    os.system(f"nvcc -std=c++11 -arch=sm_70 -O3 -o {os.path.join(codegen_dir, 'gen')} {os.path.join(codegen_dir, 'gen.cu')}")
 
     # TODO: save constants

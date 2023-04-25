@@ -97,7 +97,7 @@ class Node:
         return []
 
     def get_cuda_code(self, func_sig) -> str:
-        raise NotImplementedError
+        return func_sig + " {\n    // TODO\n}\n"
 
 
 class IndexNode:

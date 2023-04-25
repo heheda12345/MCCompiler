@@ -3,7 +3,7 @@ from mc.optim import *
 from mc.codegen import codegen
 import logging
 
-def compile(model_onnx):
+def compile(model_onnx, codegen_dir, data_dir):
     graph = Graph.from_onnx(model_onnx)
 
     RemoveUnusedOnnxInput().apply(graph)
@@ -14,4 +14,4 @@ def compile(model_onnx):
     MatchCublasPROLOGUE().apply(graph)
     logging.info("after compile\n" + graph.str_in_topological_order())
 
-    codegen(graph)
+    codegen(graph, codegen_dir, data_dir)

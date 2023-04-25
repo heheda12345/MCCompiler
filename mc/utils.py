@@ -4,8 +4,10 @@ def cpp_type(t: np.dtype):
     if t == np.float32:
         return 'float'
     elif t == np.int32:
-        return 'int'
-    elif t == np.bool:
+        return 'int32_t'
+    elif t == np.int64:
+        return 'int64_t'
+    elif t == np.bool_:
         return 'bool'
     else:
         raise ValueError(f'Unsupported dtype {t}')
