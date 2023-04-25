@@ -49,3 +49,31 @@ static const char *cublasGetErrorString(cublasStatus_t error) {
     exit(1); \
     } \
 }
+
+inline void __curandSafeCall(curandStatus_t err, const char *file, const int line )
+    {
+    if( CURAND_STATUS_SUCCESS != err) {
+        fprintf(stderr, "%s(%i) : curandSafeCall() CURAND error %d: ",
+                file, line, (int)err);
+        switch (err) {
+            case CURAND_STATUS_VERSION_MISMATCH:    fprintf(stderr, "CURAND_STATUS_VERSION_MISMATCH");
+            case CURAND_STATUS_NOT_INITIALIZED:     fprintf(stderr, "CURAND_STATUS_NOT_INITIALIZED");
+            case CURAND_STATUS_ALLOCATION_FAILED:   fprintf(stderr, "CURAND_STATUS_ALLOCATION_FAILED");
+            case CURAND_STATUS_TYPE_ERROR:          fprintf(stderr, "CURAND_STATUS_TYPE_ERROR");
+            case CURAND_STATUS_OUT_OF_RANGE:        fprintf(stderr, "CURAND_STATUS_OUT_OF_RANGE");
+            case CURAND_STATUS_LENGTH_NOT_MULTIPLE: fprintf(stderr, "CURAND_STATUS_LENGTH_NOT_MULTIPLE");
+            case CURAND_STATUS_DOUBLE_PRECISION_REQUIRED: 
+                                                    fprintf(stderr, "CURAND_STATUS_DOUBLE_PRECISION_REQUIRED");
+            case CURAND_STATUS_LAUNCH_FAILURE:      fprintf(stderr, "CURAND_STATUS_LAUNCH_FAILURE");
+            case CURAND_STATUS_PREEXISTING_FAILURE: fprintf(stderr, "CURAND_STATUS_PREEXISTING_FAILURE");
+            case CURAND_STATUS_INITIALIZATION_FAILED:     
+                                                    fprintf(stderr, "CURAND_STATUS_INITIALIZATION_FAILED");
+            case CURAND_STATUS_ARCH_MISMATCH:       fprintf(stderr, "CURAND_STATUS_ARCH_MISMATCH");
+            case CURAND_STATUS_INTERNAL_ERROR:      fprintf(stderr, "CURAND_STATUS_INTERNAL_ERROR");
+            default: fprintf(stderr, "CURAND Unknown error code\n");
+        }
+        exit(-1);
+    }
+}
+
+#define curandSafeCall(err) __curandSafeCall (err, __FILE__, __LINE__)

@@ -3,6 +3,11 @@
 #include <sstream>
 
 #include <cublas_v2.h>
+#include <cublasLt.h>
+#include <vector>
+#include <assert.h>
+#include <iostream>
+#include "common.h"
 
 namespace memb {
 
@@ -10,32 +15,17 @@ constexpr int numWarmup = 32;
 constexpr int numEval = 128;
 constexpr bool enableVerification = false;
 
-cublasLtEpilogue_t getEpilogue(OpType actType) {
-    cublasLtEpilogue_t epilogue;
-    if (actType == NONE) {
-        epilogue = CUBLASLT_EPILOGUE_DEFAULT;
-    } else if (actType == RELU) {
-        epilogue = CUBLASLT_EPILOGUE_RELU;
-    } else if (actType == GELU) {
-        epilogue = CUBLASLT_EPILOGUE_GELU;
-    } else {
-        assert(false);
-    }
-    return epilogue;
-}
-
-cublasLtMatmulDesc_t getDesc(OpType actType) {
+cublasLtMatmulDesc_t getDesc(cublasLtEpilogue_t epilogue) {
     auto transa = CUBLAS_OP_N;
     auto transb = CUBLAS_OP_N;
-    auto epilogue = getEpilogue(actType);
     cublasLtMatmulDesc_t desc;
-    cublasSafeCall(cublasLtMatmulDescCreate(&desc, CUBLAS_COMPUTE_32F_FAST_TF32,
+    checkBlasErrors(cublasLtMatmulDescCreate(&desc, CUBLAS_COMPUTE_32F_FAST_TF32,
                                             CUDA_R_32F));
-    cublasSafeCall(cublasLtMatmulDescSetAttribute(
+    checkBlasErrors(cublasLtMatmulDescSetAttribute(
         desc, CUBLASLT_MATMUL_DESC_TRANSA, &transa, sizeof(transa)));
-    cublasSafeCall(cublasLtMatmulDescSetAttribute(
+    checkBlasErrors(cublasLtMatmulDescSetAttribute(
         desc, CUBLASLT_MATMUL_DESC_TRANSB, &transb, sizeof(transb)));
-    cublasSafeCall(cublasLtMatmulDescSetAttribute(
+    checkBlasErrors(cublasLtMatmulDescSetAttribute(
         desc, CUBLASLT_MATMUL_DESC_EPILOGUE, &epilogue, sizeof(epilogue)));
     return desc;
 }
@@ -54,15 +44,15 @@ cublasLtMatrixLayout_t getLayout(int b, int m, int n, int layoutId, int bThis) {
     if (bThis == 1) {
         stride1 = 0;
     }
-    cublasSafeCall(
+    checkBlasErrors(
         cublasLtMatrixLayoutCreate(&layout, CUDA_R_32F, m, n, stride0));
     auto layoutOrder = (layoutId & 2) ? CUBLASLT_ORDER_COL : CUBLASLT_ORDER_ROW;
-    cublasSafeCall(
+    checkBlasErrors(
         cublasLtMatrixLayoutSetAttribute(layout, CUBLASLT_MATRIX_LAYOUT_ORDER,
                                          &layoutOrder, sizeof(layoutOrder)));
-    cublasSafeCall(cublasLtMatrixLayoutSetAttribute(
+    checkBlasErrors(cublasLtMatrixLayoutSetAttribute(
         layout, CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT, &b, sizeof(b)));
-    cublasSafeCall(cublasLtMatrixLayoutSetAttribute(
+    checkBlasErrors(cublasLtMatrixLayoutSetAttribute(
         layout, CUBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET, &stride1,
         sizeof(stride1)));
     return layout;
@@ -72,14 +62,14 @@ cublasLtMatrixLayout_t getLayoutBias(int b, int m, int n, int layoutId,
                                      int bThis) {
     cublasLtMatrixLayout_t layout;
     size_t stride = 0;
-    cublasSafeCall(cublasLtMatrixLayoutCreate(&layout, CUDA_R_32F, m, n, 0));
+    checkBlasErrors(cublasLtMatrixLayoutCreate(&layout, CUDA_R_32F, m, n, 0));
     auto layoutOrder = (layoutId & 2) ? CUBLASLT_ORDER_COL : CUBLASLT_ORDER_ROW;
-    cublasSafeCall(
+    checkBlasErrors(
         cublasLtMatrixLayoutSetAttribute(layout, CUBLASLT_MATRIX_LAYOUT_ORDER,
                                          &layoutOrder, sizeof(layoutOrder)));
-    cublasSafeCall(cublasLtMatrixLayoutSetAttribute(
+    checkBlasErrors(cublasLtMatrixLayoutSetAttribute(
         layout, CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT, &b, sizeof(b)));
-    cublasSafeCall(cublasLtMatrixLayoutSetAttribute(
+    checkBlasErrors(cublasLtMatrixLayoutSetAttribute(
         layout, CUBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET, &stride,
         sizeof(stride)));
     return layout;
@@ -93,14 +83,14 @@ std::vector<cublasLtMatmulAlgo_t> getAlgo(const cublasLtHandle_t &handle,
                                           const cublasLtMatrixLayout_t &layoutD,
                                           size_t wsSize) {
     cublasLtMatmulPreference_t preference = nullptr;
-    cublasSafeCall(cublasLtMatmulPreferenceCreate(&preference));
-    cublasSafeCall(cublasLtMatmulPreferenceSetAttribute(
+    checkBlasErrors(cublasLtMatmulPreferenceCreate(&preference));
+    checkBlasErrors(cublasLtMatmulPreferenceSetAttribute(
         preference, CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &wsSize,
         sizeof(wsSize)));
     const int requestedAlgoCount = 8;
     int returnedAlgoCounts = 0;
     cublasLtMatmulHeuristicResult_t heuristicResult[requestedAlgoCount];
-    cublasSafeCall(cublasLtMatmulAlgoGetHeuristic(
+    checkBlasErrors(cublasLtMatmulAlgoGetHeuristic(
         handle, desc, layoutA, layoutB, layoutC, layoutD, preference,
         requestedAlgoCount, heuristicResult, &returnedAlgoCounts));
     std::vector<cublasLtMatmulAlgo_t> algos;
@@ -124,25 +114,25 @@ double evalCublasLtKernel(const cublasLtHandle_t &handle,
     cudaEventCreate(&ed);
     if (bias == nullptr) {
         for (int i = 0; i < numWarmup; i++) {
-            cublasSafeCall(cublasLtMatmul(
+            checkBlasErrors(cublasLtMatmul(
                 handle, desc, &alpha, ptrA, layoutA, ptrB, layoutB, &beta, ptrC,
                 layoutC, ptrC, layoutC, algo, workspace, workspaceSize, 0));
         }
         cudaEventRecord(st, 0);
         for (int i = 0; i < numEval; i++) {
-            cublasSafeCall(cublasLtMatmul(
+            checkBlasErrors(cublasLtMatmul(
                 handle, desc, &alpha, ptrA, layoutA, ptrB, layoutB, &beta, ptrC,
                 layoutC, ptrC, layoutC, algo, workspace, workspaceSize, 0));
         }
     } else {
         for (int i = 0; i < numWarmup; i++) {
-            cublasSafeCall(cublasLtMatmul(
+            checkBlasErrors(cublasLtMatmul(
                 handle, desc, &alpha, ptrA, layoutA, ptrB, layoutB, &beta, bias,
                 layoutBias, ptrC, layoutC, algo, workspace, workspaceSize, 0));
         }
         cudaEventRecord(st, 0);
         for (int i = 0; i < numEval; i++) {
-            cublasSafeCall(cublasLtMatmul(
+            checkBlasErrors(cublasLtMatmul(
                 handle, desc, &alpha, ptrA, layoutA, ptrB, layoutB, &beta, bias,
                 layoutBias, ptrC, layoutC, algo, workspace, workspaceSize, 0));
         }
@@ -179,18 +169,18 @@ cublasLtMatmulAlgo_t getAlgo(const std::string &tag) {
 }
 
 bool verify(const cublasLtHandle_t &handle, int ba, int bb, int m, int n, int k,
-            int biasType, OpType actType, int layoutIdA, int layoutIdB,
+            int biasType, cublasLtEpilogue_t epilogue, int layoutIdA, int layoutIdB,
             int layoutIdC, size_t wsSize, const std::string &tag) {
     auto algo = getAlgo(tag);
     float *ptrA = nullptr, *ptrB = nullptr, *ptrC = nullptr, *bias = nullptr,
           *workspace = nullptr;
     int b = (ba < bb) ? bb : ba;
-    cudaSafeCall(cudaMalloc((void **)&ptrA, ba * m * k * sizeof(float)));
-    cudaSafeCall(cudaMalloc((void **)&ptrB, bb * k * n * sizeof(float)));
-    cudaSafeCall(cudaMalloc((void **)&ptrC, b * m * n * sizeof(float)));
-    cudaSafeCall(cudaMalloc((void **)&workspace, wsSize * sizeof(float)));
+    checkCudaErrors(cudaMalloc((void **)&ptrA, ba * m * k * sizeof(float)));
+    checkCudaErrors(cudaMalloc((void **)&ptrB, bb * k * n * sizeof(float)));
+    checkCudaErrors(cudaMalloc((void **)&ptrC, b * m * n * sizeof(float)));
+    checkCudaErrors(cudaMalloc((void **)&workspace, wsSize * sizeof(float)));
 
-    auto desc = getDesc(actType);
+    auto desc = getDesc(epilogue);
     auto layoutA = getLayout(b, m, k, layoutIdA, ba);
     auto layoutB = getLayout(b, k, n, layoutIdB, bb);
     auto layoutC = getLayout(b, m, n, layoutIdC, b);
@@ -199,16 +189,16 @@ bool verify(const cublasLtHandle_t &handle, int ba, int bb, int m, int n, int k,
     curandSafeCall(curandCreateGenerator(&gen, CURAND_RNG_PSEUDO_DEFAULT));
     curandSafeCall(curandGenerateUniform(gen, ptrA, ba * m * k));
     curandSafeCall(curandGenerateUniform(gen, ptrB, bb * k * n));
-    // cudaSafeCall(cudaMemset(ptrC, 0, m * n * sizeof(float)));
+    // checkCudaErrors(cudaMemset(ptrC, 0, m * n * sizeof(float)));
 
     float *hostA = (float *)malloc(ba * m * k * sizeof(float));
     float *hostB = (float *)malloc(bb * k * n * sizeof(float));
     float *hostC = (float *)malloc(b * m * n * sizeof(float));
     float *resC = (float *)malloc(b * m * n * sizeof(float));
 
-    cudaSafeCall(cudaMemcpy(hostA, ptrA, ba * m * k * sizeof(float),
+    checkCudaErrors(cudaMemcpy(hostA, ptrA, ba * m * k * sizeof(float),
                             cudaMemcpyDeviceToHost));
-    cudaSafeCall(cudaMemcpy(hostB, ptrB, bb * k * n * sizeof(float),
+    checkCudaErrors(cudaMemcpy(hostB, ptrB, bb * k * n * sizeof(float),
                             cudaMemcpyDeviceToHost));
 
     std::vector<std::vector<int>> strideA = {
@@ -240,18 +230,18 @@ bool verify(const cublasLtHandle_t &handle, int ba, int bb, int m, int n, int k,
 
     if (biasType == 0) {
         float alpha = 1.0f, beta = 0.0f;
-        cublasSafeCall(cublasLtMatmul(handle, desc, &alpha, ptrA, layoutA, ptrB,
+        checkBlasErrors(cublasLtMatmul(handle, desc, &alpha, ptrA, layoutA, ptrB,
                                       layoutB, &beta, ptrC, layoutC, ptrC,
                                       layoutC, &algo, workspace, wsSize, 0));
     } else {
         float alpha = 1.0f, beta = 1.0f;
-        cudaSafeCall(cudaMalloc((void **)&bias, n * sizeof(float)));
+        checkCudaErrors(cudaMalloc((void **)&bias, n * sizeof(float)));
         auto layoutBias = getLayoutBias(b, m, n, layoutIdC, b);
         curandSafeCall(curandGenerateUniform(gen, bias, n));
         float *hostBias = (float *)malloc(n * sizeof(float));
-        cudaSafeCall(cudaMemcpy(hostBias, bias, n * sizeof(float),
+        checkCudaErrors(cudaMemcpy(hostBias, bias, n * sizeof(float),
                                 cudaMemcpyDeviceToHost));
-        cublasSafeCall(cublasLtMatmul(handle, desc, &alpha, ptrA, layoutA, ptrB,
+        checkBlasErrors(cublasLtMatmul(handle, desc, &alpha, ptrA, layoutA, ptrB,
                                       layoutB, &beta, bias, layoutBias, ptrC,
                                       layoutC, &algo, workspace, wsSize, 0));
         for (int ib = 0; ib < b; ib++) {
@@ -264,7 +254,7 @@ bool verify(const cublasLtHandle_t &handle, int ba, int bb, int m, int n, int k,
             }
         }
     }
-    cudaSafeCall(cudaMemcpy(resC, ptrC, b * m * n * sizeof(float),
+    checkCudaErrors(cudaMemcpy(resC, ptrC, b * m * n * sizeof(float),
                             cudaMemcpyDeviceToHost));
 
     for (int i = 0; i < b * m * n; i++) {
@@ -277,24 +267,24 @@ bool verify(const cublasLtHandle_t &handle, int ba, int bb, int m, int n, int k,
 }
 
 std::pair<float, std::string> evalCublasLt(int ba, int bb, int m, int n, int k,
-                                           int biasType, OpType actType,
+                                           int biasType, cublasLtEpilogue_t epilogue,
                                            int layoutIdA, int layoutIdB,
                                            int layoutIdC, size_t wsSize) {
     float *ptrA = nullptr, *ptrB = nullptr, *ptrC = nullptr, *bias = nullptr,
           *workspace = nullptr;
     int b = (ba < bb) ? bb : ba;
-    cudaSafeCall(cudaMalloc((void **)&ptrA, ba * m * k * sizeof(float)));
-    cudaSafeCall(cudaMalloc((void **)&ptrB, bb * k * n * sizeof(float)));
-    cudaSafeCall(cudaMalloc((void **)&ptrC, b * m * n * sizeof(float)));
-    cudaSafeCall(cudaMalloc((void **)&workspace, wsSize * sizeof(float)));
+    checkCudaErrors(cudaMalloc((void **)&ptrA, ba * m * k * sizeof(float)));
+    checkCudaErrors(cudaMalloc((void **)&ptrB, bb * k * n * sizeof(float)));
+    checkCudaErrors(cudaMalloc((void **)&ptrC, b * m * n * sizeof(float)));
+    checkCudaErrors(cudaMalloc((void **)&workspace, wsSize * sizeof(float)));
     if (biasType != 0) {
-        cudaSafeCall(cudaMalloc((void **)&bias, n * sizeof(float)));
+        checkCudaErrors(cudaMalloc((void **)&bias, n * sizeof(float)));
     }
 
     cublasLtHandle_t handle;
     cublasLtCreate(&handle);
 
-    auto desc = getDesc(actType);
+    auto desc = getDesc(epilogue);
     auto layoutA = getLayout(b, m, k, layoutIdA, ba);
     auto layoutB = getLayout(b, k, n, layoutIdB, bb);
     auto layoutC = getLayout(b, m, n, layoutIdC, b);
@@ -316,22 +306,24 @@ std::pair<float, std::string> evalCublasLt(int ba, int bb, int m, int n, int k,
     }
     assert(bestIdx != -1);
     assert(!enableVerification ||
-           verify(handle, ba, bb, m, n, k, biasType, actType, layoutIdA,
+           verify(handle, ba, bb, m, n, k, biasType, epilogue, layoutIdA,
                   layoutIdB, layoutIdC, wsSize, getTag(algos[bestIdx])));
 
-    cublasSafeCall(cublasLtMatrixLayoutDestroy(layoutA));
-    cublasSafeCall(cublasLtMatrixLayoutDestroy(layoutB));
-    cublasSafeCall(cublasLtMatrixLayoutDestroy(layoutC));
-    cublasSafeCall(cublasLtMatmulDescDestroy(desc));
-    cublasSafeCall(cublasLtDestroy(handle));
-    cudaSafeCall(cudaFree(ptrA));
-    cudaSafeCall(cudaFree(ptrB));
-    cudaSafeCall(cudaFree(ptrC));
-    cudaSafeCall(cudaFree(workspace));
+    checkBlasErrors(cublasLtMatrixLayoutDestroy(layoutA));
+    checkBlasErrors(cublasLtMatrixLayoutDestroy(layoutB));
+    checkBlasErrors(cublasLtMatrixLayoutDestroy(layoutC));
+    checkBlasErrors(cublasLtMatmulDescDestroy(desc));
+    checkBlasErrors(cublasLtDestroy(handle));
+    checkCudaErrors(cudaFree(ptrA));
+    checkCudaErrors(cudaFree(ptrB));
+    checkCudaErrors(cudaFree(ptrC));
+    checkCudaErrors(cudaFree(workspace));
     if (biasType != 0) {
-        cudaSafeCall(cudaFree(bias));
+        checkCudaErrors(cudaFree(bias));
     }
 
     return {bestTime, getTag(algos[bestIdx])};
 }
 } // namespace MCCompiler
+
+// g++ -fPIC -shared -Wl,-soname,libcublas_util.so -o libcublas_util.so mc/operators/cuda/cublas.cpp       
