@@ -54,7 +54,6 @@ class UniMatMul(Node):
             epilogue: Epilogue = Epilogue.CUBLASLT_EPILOGUE_DEFAULT,
             input_offset: List[int] = [0, 0, 0], output_offset: int = 0,
         ) -> None:
-        print("matmul: alpha=", alpha, name)
         super().__init__(name, input_nodes, output_nodes, input_types, output_types, input_constants)
         self.size_b = size_b
         self.size_m = size_m
@@ -87,9 +86,9 @@ class UniMatMul(Node):
         writer = CodeWriter()
         writer.wl(func_sig)
         writer.block_start()
-        writer.wl('// TODO')
+        writer.write("// TODO")
         writer.block_end()
-        return writer.get_code()
+        return writer.get_code() 
 
     def __str__(self) -> str:
         s = super().__str__()
