@@ -6,6 +6,9 @@ import numpy as np
 from mc.utils import cpp_type, CodeWriter
 import os
 
+def align(size: int, alignment: int):
+    return ((size + alignment - 1) // alignment) * alignment
+
 class CodeGen(CodeWriter):
     name_dict: Dict[str, str]
     codegen_dir: str
@@ -57,57 +60,6 @@ class CodeGen(CodeWriter):
 #include <cublas_v2.h>
 #include <PATH_TO_MC_OPERATOR_HEADER>
 
-#define UNREACHABLE() { \
-    printf("file %s line %i: unreachable!\n", __FILE__, __LINE__); \
-    fflush(stdout); \
-    exit(1); \
-}
-
-static const char *cublasGetErrorString(cublasStatus_t error) {
-    switch (error)
-    {
-        case CUBLAS_STATUS_SUCCESS:
-            return "CUBLAS_STATUS_SUCCESS";
-        case CUBLAS_STATUS_NOT_INITIALIZED:
-            return "CUBLAS_STATUS_NOT_INITIALIZED";
-        case CUBLAS_STATUS_ALLOC_FAILED:
-            return "CUBLAS_STATUS_ALLOC_FAILED";
-        case CUBLAS_STATUS_INVALID_VALUE:
-            return "CUBLAS_STATUS_INVALID_VALUE";
-        case CUBLAS_STATUS_ARCH_MISMATCH:
-            return "CUBLAS_STATUS_ARCH_MISMATCH";
-        case CUBLAS_STATUS_MAPPING_ERROR:
-            return "CUBLAS_STATUS_MAPPING_ERROR";
-        case CUBLAS_STATUS_EXECUTION_FAILED:
-            return "CUBLAS_STATUS_EXECUTION_FAILED";
-        case CUBLAS_STATUS_INTERNAL_ERROR:
-            return "CUBLAS_STATUS_INTERNAL_ERROR";
-        case CUBLAS_STATUS_NOT_SUPPORTED:
-            return "CUBLAS_STATUS_NOT_SUPPORTED";
-        case CUBLAS_STATUS_LICENSE_ERROR:
-            return "CUBLAS_STATUS_LICENSE_ERROR";
-        default:
-            return "<unknown>";
-    }
-    UNREACHABLE()
-}
-
-#define checkCudaErrors(stmt) {                                 \
-    cudaError_t err = stmt;                            \
-    if (err != cudaSuccess) {                          \
-    fprintf(stderr, "%s in file %s, function %s, line %i: %04d %s\n", #stmt, __FILE__, __FUNCTION__, __LINE__, err, cudaGetErrorString(err)); \
-    exit(1); \
-    }                                                  \
-}
-
-#define checkBlasErrors(stmt) { \
-    cublasStatus_t err = stmt; \
-    if (err != CUBLAS_STATUS_SUCCESS) {                          \
-    fprintf(stderr, "%s in file %s, function %s, line %i: %04d %s\n", #stmt, __FILE__, __FUNCTION__, __LINE__, err, cublasGetErrorString(err)); \
-    exit(1); \
-    } \
-}
-
 void load_tensor(std::string f_name, void* buffer, size_t size, bool on_gpu=true) {
     std::ifstream f(f_name.c_str(), std::ios::in | std::ios::binary);
     if (!f.is_open()) {
@@ -157,14 +109,15 @@ void print_tensor_cpu(std::string name, float* data, size_t size) {
             self.wl(f'{cpp_type(tensor.dtype)}* {tensor_name};')
         self.wl('')
         buffer_size = 0
+        align_size = 256
         for node in node_list:
             if not isinstance(node, ops.Input):
                 for i in range(len(node.output_types)):
                     if len(node.output_nodes[i]) == 1 and isinstance(node.output_nodes[i][0].node, ops.Output):
                         continue
-                    buffer_size += node.output_types[i].size() * node.output_types[i].dtype.itemsize
+                    buffer_size += align(node.output_types[i].size() * node.output_types[i].dtype.itemsize, align_size)
         for tensor in self.node_constant_tensors.values():
-            buffer_size += tensor.size * tensor.dtype.itemsize
+            buffer_size += align(tensor.size * tensor.dtype.itemsize, align_size)
         buffer_ptr = 0
         self.wl('void init()')
         self.block_start()
@@ -175,10 +128,10 @@ void print_tensor_cpu(std::string name, float* data, size_t size) {
                     if len(node.output_nodes[i]) == 1 and isinstance(node.output_nodes[i][0].node, ops.Output):
                         continue
                     self.wl(f'{self.tensor_name(IndexNode(node, i))} = ({cpp_type(node.output_types[i].dtype)}*)(cuda_buffer + {buffer_ptr}); /* {node.output_types[i].shape} * {node.output_types[i].dtype.itemsize} */')
-                    buffer_ptr += node.output_types[i].size() * node.output_types[i].dtype.itemsize
+                    buffer_ptr += align(node.output_types[i].size() * node.output_types[i].dtype.itemsize, align_size)
         for tensor_name, tensor in self.node_constant_tensors.items():
             self.wl(f'{tensor_name} = ({cpp_type(tensor.dtype)}*)(cuda_buffer + {buffer_ptr}); /* {tensor.shape} * {tensor.dtype.itemsize} */')
-            buffer_ptr += tensor.size * tensor.dtype.itemsize
+            buffer_ptr += align(tensor.size * tensor.dtype.itemsize, align_size)
         for node in node_list:
             if isinstance(node, ops.Constant):
                 self.wl(f'load_tensor("{os.path.join(self.codegen_dir, "constants", self.node_name(node))}.bin", {self.tensor_name(IndexNode(node, 0))}, {node.output_types[0].size() * node.output_types[0].dtype.itemsize});')
@@ -219,6 +172,7 @@ void print_tensor_cpu(std::string name, float* data, size_t size) {
             params = [self.tensor_name(input_node) for input_node in node.input_nodes]
             params += [self.tensor_name(IndexNode(node, i)) for i in range(len(node.output_types))]
             self.wl(f'kernel_{self.node_name(node)}({", ".join(params)});')
+            self.wl(f'checkCudaErrors(cudaDeviceSynchronize());') # for testing only
 
         self.block_end()
         self.wl('')
