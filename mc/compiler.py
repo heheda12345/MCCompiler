@@ -11,7 +11,8 @@ def compile(model_onnx, codegen_dir, data_dir):
     MatchLayerNorm().apply(graph)
     MatchGELU().apply(graph)
     MatchCublasEPILOGUE().apply(graph)
-    MatchCublasPROLOGUE().apply(graph)
+    MatchCublasAttrs().apply(graph)
     logging.info("after compile\n" + graph.str_in_topological_order())
+    logging.info("---------------------------")
 
     codegen(graph, codegen_dir, data_dir)

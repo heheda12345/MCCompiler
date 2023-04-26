@@ -55,7 +55,7 @@ class UniMatMul(Node):
             input_constants: List[Optional[np.ndarray]],
             size_ba: int = -1, size_bb: int = -1, size_m: int = -1, size_n: int = -1, size_k: int = -1,
             input0_perm: Tuple[int, int, int] = (0, 1, 2), input1_perm: Tuple[int, int, int] = (0, 0, 0),
-            output_perm: Tuple[int, int, int] = (0, 0, 0),
+            output_perm: Tuple[int, int, int] = (0, 1, 2),
             bias_perm: Optional[Tuple[int, int, int]]=None,
             alpha: float = 1.0, beta: float = 0.0,
             epilogue: Epilogue = Epilogue.CUBLASLT_EPILOGUE_DEFAULT,
@@ -140,7 +140,7 @@ class UniMatMul(Node):
         
         layoutIdA = self.get_layout_id_from_perm(self.input_perm[0])
         layoutIdB = self.get_layout_id_from_perm(self.input_perm[1])
-        layoutIdC = 0
+        layoutIdC = self.get_layout_id_from_perm(self.output_perm)
         wsSize = 1024
 
         self.matmul_interface = {

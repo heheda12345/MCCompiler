@@ -49,16 +49,34 @@ class MergeTranspose(Optimization):
                 matmul_node = node.output_nodes[0][0].node
                 if input_idx == 0 or input_idx == 1:
                     old_perm = matmul_node.input_perm[input_idx]
-                    transposed = False
                     if old_perm != (0, 1, 2): # TODO: fuse multiple transposes
+                        continue
+                    if matmul_node.real_input_shape[input_idx] != matmul_node.input_types[input_idx].shape:
                         continue
                     new_perm = tuple(copy.deepcopy(node.perm))
                     matmul_node.input_perm[input_idx] = new_perm
                     matmul_node.input_types[input_idx] = node.input_types[0]
-                    logging.info(f"{matmul_node.name}: change input{input_idx}_stride from {old_perm} to {new_perm} due to transpose perm {node.perm}")
+                    logging.info(f"{matmul_node.name}: change input{input_idx}_perm from {old_perm} to {new_perm} due to transpose perm {node.perm}")
                     graph.remove_node(node)
                 else:
                     continue
+        graph.clear_unused_nodes()
+
+
+class MergeTransposeToOutput(Optimization):
+    def apply(self, graph: Graph):
+        for matmul_node in graph.nodes.values():
+            if isinstance(matmul_node, ops.UniMatMul) \
+                and isinstance(matmul_node.output_nodes[0][0].node, ops.Transpose):
+                transpose_node = matmul_node.output_nodes[0][0].node
+                old_perm = matmul_node.output_perm
+                if old_perm != (0, 1, 2): # TODO: fuse multiple transposes
+                    continue
+                new_perm = tuple(copy.deepcopy(transpose_node.perm))
+                matmul_node.output_perm = new_perm
+                matmul_node.output_types[0] = transpose_node.output_types[0]
+                logging.info(f"{matmul_node.name}: change output_perm from {old_perm} to {new_perm} due to transpose perm {transpose_node.perm}")
+                graph.remove_node(transpose_node)
         graph.clear_unused_nodes()
 
 
@@ -96,7 +114,7 @@ class MergeSlice(Optimization):
         graph.clear_unused_nodes()
 
 
-class MatchCublasPROLOGUE(Optimization):
+class MatchCublasAttrs(Optimization):
     def __init__(self):
         super().__init__()
     
@@ -106,6 +124,7 @@ class MatchCublasPROLOGUE(Optimization):
             MergeLinearELmenentWise(),
             MergeTranspose(),
             MergeSlice(),
+            MergeTransposeToOutput(),
         ]
         for ptn in passes:
             ptn.apply(graph)
