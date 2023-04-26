@@ -124,11 +124,12 @@ class UniMatMul(Node):
         print(f"epilogue={self.epilogue.name}")
         print(f"input_offset={self.input_offset}")
         print(f"output_offset={self.output_offset}")
+        print(f"real_input_shape={self.real_input_shape}")
 
         ba = self.size_ba
         bb = self.size_bb
         if len(self.input_types) == 3:
-            bc = self.input_types[2].size() // self.size_m // self.size_n
+            bc = self.input_types[2].size() // self.size_n
         else:
             bc = 1
         m = self.size_m

@@ -32,38 +32,12 @@ class MergeLinearELmenentWise(Optimization):
         graph.clear_unused_nodes()
 
 
-def perm_to_stride(perm, shape: List[int]):
+def shape_to_stride(shape: List[int]):
     stride = [1]
     for i in range(len(shape) - 1, 0, -1):
         stride.append(stride[-1] * shape[i])
     stride.reverse()
-    new_stride = []
-    for x in perm:
-        if x == -1:
-            new_stride.append(0)
-        else:
-            new_stride.append(stride[x])
-    return new_stride
-
-
-def stride_to_perm(stride: List[int], shape: List[int]):
-    print("stride", stride)
-    print("shape", shape)
-    assert len(stride) == len(shape)
-    shape_stride = [1]
-    for i in range(len(shape) - 1, 0, -1):
-        shape_stride.append(shape_stride[-1] * shape[i])
-    shape_stride.reverse()
-    perm = []
-    for s in stride:
-        if s == 0:
-            perm.append(-1)
-        elif s in shape_stride:
-            perm.append(shape_stride.index(s))
-        else:
-            raise ValueError("stride not match shape")
-    return perm
-
+    return stride
 
 class MergeTranspose(Optimization):
     def apply(self, graph: Graph):
@@ -100,14 +74,22 @@ class MergeSlice(Optimization):
                 input_idx = slice_node.output_nodes[0][0].index
                 matmul_node: ops.UniMatMul = slice_node.output_nodes[0][0].node
                 if input_idx == 0 or input_idx == 1:
-                    # old_stride = matmul_node.input_stride[input_idx]
-                    # perm = stride_to_perm(matmul_node.input_stride[input_idx], matmul_node.input_types[input_idx].shape)
-                    # new_stride = perm_to_stride(perm, slice_node.input_types[0].shape)
-                    offset = np.prod(np.array(slice_node.input_types[0].shape[slice_node.axes[0] + 1:], dtype=np.int64)) * slice_node.starts[0]
-                    # matmul_node.input_stride[input_idx] = new_stride
+                    perm = matmul_node.input_perm[input_idx]
+                    shape_after_slice = [matmul_node.real_input_shape[input_idx][perm.index(i)] for i in range(len(perm))]
+                    slice_input_shape = slice_node.input_types[0].shape
+                    slice_full_size = np.prod(np.array([slice_input_shape[slice_node.axes[0]:]], dtype=np.int64))
+                    slice_start = np.prod(np.array(slice_node.input_types[0].shape[slice_node.axes[0] + 1:], dtype=np.int64)) * slice_node.starts[0]
+                    slice_end = np.prod(np.array(slice_node.input_types[0].shape[slice_node.axes[0] + 1:], dtype=np.int64)) * slice_node.ends[0]
+                    slice_size = slice_end - slice_start
+                    stride_after_slice = shape_to_stride(shape_after_slice)
+                    if slice_size not in stride_after_slice: continue
+                    real_slice_axis = stride_after_slice.index(slice_size)
+                    old_axis_len = matmul_node.real_input_shape[input_idx][real_slice_axis] 
+                    new_axis_len = old_axis_len * slice_full_size // slice_size
+                    matmul_node.real_input_shape[input_idx][real_slice_axis] = new_axis_len
                     matmul_node.input_types[input_idx] = slice_node.input_types[0]
-                    matmul_node.input_offset[input_idx] += offset
-                    logging.info(f"{matmul_node.name}: change input{input_idx}: add {offset} to offset due to slice {slice_node.starts[0]}:{slice_node.ends[0]}:{slice_node.steps[0]}")
+                    matmul_node.input_offset[input_idx] += slice_start
+                    logging.info(f"{matmul_node.name}: change input{input_idx}: add {slice_start} to offset due to slice {slice_node.starts[0]}:{slice_node.ends[0]}:{slice_node.steps[0]}")
                     graph.remove_node(slice_node, check=False)
                 else:
                     continue
