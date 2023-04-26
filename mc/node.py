@@ -97,7 +97,7 @@ class Node:
         return []
 
     def get_cuda_code(self, func_sig, node_name) -> str:
-        return func_sig + " {\n    // TODO\n}\n"
+        raise NotImplementedError
 
     def get_constant_tensors(self, node_name) -> Dict[str, np.ndarray]:
         return {}

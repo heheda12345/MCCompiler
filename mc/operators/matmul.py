@@ -237,7 +237,7 @@ checkCudaErrors(cudaMalloc((void **)&{node_name}__beta, sizeof(float)));
         writer.wl(func_sig)
         writer.block_start()
         if self.matmul_interface['biasType'] == 0:
-            writer.wl(f'checkBlasErrors(cublasLtMatmul({node_name}__handle, {node_name}__desc, &{node_name}__alpha, input0 + {self.input_offset[0]}, {node_name}__layoutA, input1 + {self.input_offset[1]}, {node_name}__layoutB, &{node_name}__beta, ouptut0, {node_name}__layoutC, output0, {node_name}__layoutC, &{node_name}__algo, {node_name}__workspace, {node_name}__wsSize, 0));')
+            writer.wl(f'checkBlasErrors(cublasLtMatmul({node_name}__handle, {node_name}__desc, &{node_name}__alpha, input0 + {self.input_offset[0]}, {node_name}__layoutA, input1 + {self.input_offset[1]}, {node_name}__layoutB, &{node_name}__beta, output0, {node_name}__layoutC, output0, {node_name}__layoutC, &{node_name}__algo, {node_name}__workspace, {node_name}__wsSize, 0));')
         else:
             writer.wl(f'checkBlasErrors(cublasLtMatmul({node_name}__handle, {node_name}__desc, &{node_name}__alpha, input0 + {self.input_offset[0]}, {node_name}__layoutA, input1 + {self.input_offset[1]}, {node_name}__layoutB, &{node_name}__beta, input2, {node_name}__layoutBias, output0, {node_name}__layoutC, &{node_name}__algo, {node_name}__workspace, {node_name}__wsSize, 0));')
         writer.block_end()
