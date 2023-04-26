@@ -90,9 +90,12 @@ class UniMatMul(Node):
 
     def gen_matmul_tag(self):
         cache = {
-            '10,1,1,3072,768,1,1,0,2,0,1024': 'CUBLASLT 0x000000000000000d 0x0000000100000000 0x0000000000000000 0x00002db70000000c 0x0000000000000000 0x000000000000004d 0x0000000000000050 0x0000000000000000',
-            '10,1,1,3072,768,1,1,0,0,0,1024': 'CUBLASLT 0x000000000000000d 0x0000000100000000 0x0000000000000000 0x00002db700000002 0x0000000000000000 0x000000000000004d 0x0000000000000050 0x0000000000000000'
+            "10,1,1,3072,768,1,1,0,0,0,1024": "CUBLASLT 0x000000000000000d 0x0000000100000000 0x0000000000000000 0x00002db700000002 0x0000000000000000 0x000000000000004d 0x0000000000000050 0x0000000000000000",
+            "10,1,1,2304,768,1,1,0,0,0,1024": "CUBLASLT 0x000000000000000d 0x0000000100000000 0x0000000000000000 0x00002db700000002 0x0000000000000000 0x000000000000004d 0x0000000000000050 0x0000000000000000"
         }
+        print(self)
+        print(f"input_shape={self.input_types}")
+        print(f"output_shape={self.output_types}")
         print(f"size_b={self.size_b}, size_m={self.size_m}, size_n={self.size_n}, size_k={self.size_k}")
         print(f"input_stride={self.input_stride}")
         print(f"output_stride={self.output_stride}")
@@ -105,6 +108,13 @@ class UniMatMul(Node):
 
         ba = self.size_b if self.input_stride[0][0] > 0 else 1
         bb = self.size_b if self.input_stride[1][0] > 0 else 1
+        if len(self.input_types) == 3:
+            if len(self.input_types[2].shape) <= 2:
+                bc = 1
+            else:
+                bc = self.input_types[2].size() // self.input_types[2].shape[0] // self.input_types[2].shape[1]
+        else:
+            bc = 1
         m = self.size_m
         n = self.size_n
         k = self.size_k
@@ -118,6 +128,7 @@ class UniMatMul(Node):
         self.matmul_interface = {
             'ba': ba,
             'bb': bb,
+            'bc': bc,
             'm': m,
             'n': n,
             'k': k,
@@ -135,7 +146,7 @@ class UniMatMul(Node):
             return
 
         cublas_util_path = os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../build/cublas_util'))
-        cmd = f'{cublas_util_path} {ba} {bb} {m} {n} {k} {biasType} {epilogue.value} {layoutIdA} {layoutIdB} {layoutIdC} {wsSize}'
+        cmd = f'{cublas_util_path} {ba} {bb} {bc} {m} {n} {k} {biasType} {epilogue.value} {layoutIdA} {layoutIdB} {layoutIdC} {wsSize}'
         proc = subprocess.Popen([cmd], stdout=subprocess.PIPE, shell=True)
         (out, err) = proc.communicate()
         if err is not None:
@@ -170,8 +181,8 @@ class UniMatMul(Node):
     def get_init_code(self, node_name) -> str:
         if self.matmul_tag is None:
             self.gen_matmul_tag()
-        ba, bb, m, n, k, biasType, epilogue, layoutIdA, layoutIdB, layoutIdC, wsSize = \
-            self.matmul_interface['ba'], self.matmul_interface['bb'], self.matmul_interface['m'], \
+        ba, bb, bc, m, n, k, biasType, epilogue, layoutIdA, layoutIdB, layoutIdC, wsSize = \
+            self.matmul_interface['ba'], self.matmul_interface['bb'], self.matmul_interface['bc'], self.matmul_interface['m'], \
             self.matmul_interface['n'], self.matmul_interface['k'], self.matmul_interface['biasType'], \
             self.matmul_interface['epilogue'], self.matmul_interface['layoutIdA'], \
             self.matmul_interface['layoutIdB'], self.matmul_interface['layoutIdC'], self.matmul_interface['wsSize']
@@ -195,7 +206,7 @@ checkCudaErrors(cudaMalloc((void **)&{node_name}__beta, sizeof(float)));
 {node_name}__wsSize = {wsSize};
 ''')    
         if biasType == 1:
-            writer.wl(f'{node_name}__layoutBias = MCCompiler::cublas_utils::getLayoutBias({b}, {m}, {n}, {layoutIdC}, {b});')
+            writer.wl(f'{node_name}__layoutBias = MCCompiler::cublas_utils::getLayoutBias({b}, {m}, {n}, {layoutIdC}, {bc});')
         return writer.get_code()
 
     def get_cuda_code(self, func_sig, node_name) -> str:

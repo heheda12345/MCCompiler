@@ -59,9 +59,7 @@ class Match_CUBLASLT_EPILOGUE_BIAS_V2(PatternToNode):
         return new_node
     
     def is_match(self, node: Node, name_in_pattern: str):
-        print("name_in_pattern", name_in_pattern)
         if name_in_pattern == f"{self.__class__.__name__}.matmul.0":
-            print("node:", node)
             return len(node.input_nodes) == 2
         return isinstance(node, self.pattern[name_in_pattern].__class__)
 

@@ -2,6 +2,44 @@
 #include <cublasLt.h>
 #include <sstream>
 
+static const char *cublasGetErrorString(cublasStatus_t error) {
+    switch (error)
+    {
+        case CUBLAS_STATUS_SUCCESS:
+            return "CUBLAS_STATUS_SUCCESS";
+        case CUBLAS_STATUS_NOT_INITIALIZED:
+            return "CUBLAS_STATUS_NOT_INITIALIZED";
+        case CUBLAS_STATUS_ALLOC_FAILED:
+            return "CUBLAS_STATUS_ALLOC_FAILED";
+        case CUBLAS_STATUS_INVALID_VALUE:
+            return "CUBLAS_STATUS_INVALID_VALUE";
+        case CUBLAS_STATUS_ARCH_MISMATCH:
+            return "CUBLAS_STATUS_ARCH_MISMATCH";
+        case CUBLAS_STATUS_MAPPING_ERROR:
+            return "CUBLAS_STATUS_MAPPING_ERROR";
+        case CUBLAS_STATUS_EXECUTION_FAILED:
+            return "CUBLAS_STATUS_EXECUTION_FAILED";
+        case CUBLAS_STATUS_INTERNAL_ERROR:
+            return "CUBLAS_STATUS_INTERNAL_ERROR";
+        case CUBLAS_STATUS_NOT_SUPPORTED:
+            return "CUBLAS_STATUS_NOT_SUPPORTED";
+        case CUBLAS_STATUS_LICENSE_ERROR:
+            return "CUBLAS_STATUS_LICENSE_ERROR";
+        default:
+            return "<unknown>";
+    }
+    UNREACHABLE()
+}
+
+#define checkBlasErrors(stmt) { \
+    cublasStatus_t err = stmt; \
+    if (err != CUBLAS_STATUS_SUCCESS) {                          \
+    fprintf(stderr, "%s in file %s, function %s, line %i: %04d %s\n", #stmt, __FILE__, __FUNCTION__, __LINE__, err, cublasGetErrorString(err)); \
+    exit(1); \
+    } \
+}
+
+
 namespace MCCompiler {
 namespace cublas_utils {
 
@@ -64,7 +102,10 @@ cublasLtMatrixLayout_t getLayout(int b, int m, int n, int layoutId, int bThis) {
 cublasLtMatrixLayout_t getLayoutBias(int b, int m, int n, int layoutId,
                                      int bThis) {
     cublasLtMatrixLayout_t layout;
-    size_t stride = 0;
+    size_t stride = n;
+    if (bThis == 1) {
+        stride = 0;
+    }
     checkBlasErrors(cublasLtMatrixLayoutCreate(&layout, CUDA_R_32F, m, n, 0));
     auto layoutOrder = (layoutId & 2) ? CUBLASLT_ORDER_COL : CUBLASLT_ORDER_ROW;
     checkBlasErrors(
