@@ -40,7 +40,7 @@ namespace MCCompiler {
 
 constexpr int numWarmup = 32;
 constexpr int numEval = 128;
-constexpr bool enableVerification = false;
+constexpr bool enableVerification = true;
 
 std::vector<cublasLtMatmulAlgo_t> getAlgo(const cublasLtHandle_t &handle,
                                           const cublasLtMatmulDesc_t &desc,
@@ -124,44 +124,49 @@ std::string getTag(const cublasLtMatmulAlgo_t &algo) {
 }
 
 bool verify(const cublasLtHandle_t &handle, int ba, int bb, int bc, int m, int n, int k,
+            int rba, int rma, int rka,
+            int rbb, int rkb, int rnb,
             int biasType, cublasLtEpilogue_t epilogue, int layoutIdA, int layoutIdB,
             int layoutIdC, size_t wsSize, const std::string &tag) {
     auto algo = MCCompiler::cublas_utils::getAlgo(tag);
     float *ptrA = nullptr, *ptrB = nullptr, *ptrC = nullptr, *bias = nullptr,
           *workspace = nullptr;
     int b = (ba < bb) ? bb : ba;
-    checkCudaErrors(cudaMalloc((void **)&ptrA, ba * m * k * sizeof(float)));
-    checkCudaErrors(cudaMalloc((void **)&ptrB, bb * k * n * sizeof(float)));
+    checkCudaErrors(cudaMalloc((void **)&ptrA, rba * rma * rka * sizeof(float)));
+    checkCudaErrors(cudaMalloc((void **)&ptrB, rbb * rkb * rnb * sizeof(float)));
     checkCudaErrors(cudaMalloc((void **)&ptrC, b * m * n * sizeof(float)));
     checkCudaErrors(cudaMalloc((void **)&workspace, wsSize * sizeof(float)));
 
     auto desc = MCCompiler::cublas_utils::getDesc(epilogue);
-    auto layoutA = MCCompiler::cublas_utils::getLayout(b, m, k, layoutIdA, ba);
-    auto layoutB = MCCompiler::cublas_utils::getLayout(b, k, n, layoutIdB, bb);
-    auto layoutC = MCCompiler::cublas_utils::getLayout(b, m, n, layoutIdC, b);
+    auto layoutA = MCCompiler::cublas_utils::getLayout(b, m, k, rba, rma, rka, layoutIdA, ba);
+    auto layoutB = MCCompiler::cublas_utils::getLayout(b, k, n, rbb, rkb, rnb, layoutIdB, bb);
+    auto layoutC = MCCompiler::cublas_utils::getLayout(b, m, n, b, m, n, layoutIdC, b);
 
     curandGenerator_t gen;
     curandSafeCall(curandCreateGenerator(&gen, CURAND_RNG_PSEUDO_DEFAULT));
-    curandSafeCall(curandGenerateUniform(gen, ptrA, ba * m * k));
-    curandSafeCall(curandGenerateUniform(gen, ptrB, bb * k * n));
+    curandSafeCall(curandGenerateUniform(gen, ptrA, rba * rma * rka));
+    curandSafeCall(curandGenerateUniform(gen, ptrB, rbb * rkb * rnb));
     // checkCudaErrors(cudaMemset(ptrC, 0, m * n * sizeof(float)));
 
-    float *hostA = (float *)malloc(ba * m * k * sizeof(float));
-    float *hostB = (float *)malloc(bb * k * n * sizeof(float));
+    float *hostA = (float *)malloc(rba * rma * rka * sizeof(float));
+    float *hostB = (float *)malloc(rbb * rkb * rnb * sizeof(float));
     float *hostC = (float *)malloc(b * m * n * sizeof(float));
     float *resC = (float *)malloc(b * m * n * sizeof(float));
 
-    checkCudaErrors(cudaMemcpy(hostA, ptrA, ba * m * k * sizeof(float),
+    checkCudaErrors(cudaMemcpy(hostA, ptrA, rba * rma * rka * sizeof(float),
                             cudaMemcpyDeviceToHost));
-    checkCudaErrors(cudaMemcpy(hostB, ptrB, bb * k * n * sizeof(float),
+    checkCudaErrors(cudaMemcpy(hostB, ptrB, rbb * rkb * rnb * sizeof(float),
                             cudaMemcpyDeviceToHost));
 
     std::vector<std::vector<int>> strideA = {
-        {m * k, k, 1}, {k, ba * k, 1}, {m * k, 1, m}, {m, 1, ba * m}};
+        {rma * rka, rka, 1}, {rka, rba * rka, 1}, {rma * rka, 1, rma}, {rma, 1, rba * rma}};
     std::vector<std::vector<int>> strideB = {
-        {k * n, n, 1}, {n, bb * n, 1}, {k * n, 1, k}, {k, 1, bb * k}};
+        {rkb * rnb, rnb, 1}, {rnb, rbb * rnb, 1}, {rkb * rnb, 1, rkb}, {rkb, 1, rbb * rkb}};
     std::vector<std::vector<int>> strideC = {
         {m * n, n, 1}, {n, b * n, 1}, {m * n, 1, m}, {m, 1, b * m}};
+    
+    if (ba == 1) { strideA[0][0] = strideA[1][0] = strideA[2][0] = strideA[3][0] = 0; }
+    if (bb == 1) { strideB[0][0] = strideB[1][0] = strideB[2][0] = strideB[3][0] = 0; }
 
     for (int ib = 0; ib < b; ib++) {
         for (int im = 0; im < m; im++) {
@@ -205,7 +210,7 @@ bool verify(const cublasLtHandle_t &handle, int ba, int bb, int bc, int m, int n
                 for (int in = 0; in < n; in++) {
                     hostC[ib * strideC[layoutIdC][0] +
                           im * strideC[layoutIdC][1] +
-                          in * strideC[layoutIdC][2]] += hostBias[ib * stride_bias + in]; // TODO
+                          in * strideC[layoutIdC][2]] += hostBias[ib * stride_bias + in];
                 }
             }
         }
@@ -223,9 +228,11 @@ bool verify(const cublasLtHandle_t &handle, int ba, int bb, int bc, int m, int n
 }
 
 void evalCublasLt(int ba, int bb, int bc, int m, int n, int k,
-                         int biasType, int epilogue,
-                         int layoutIdA, int layoutIdB,
-                         int layoutIdC, size_t wsSize) {
+                  int rba, int rma, int rka,
+                  int rbb, int rkb, int rnb,
+                  int biasType, int epilogue,
+                  int layoutIdA, int layoutIdB,
+                  int layoutIdC, size_t wsSize) {
     printf("evaluating %d %d %d %d %d %d with biastype %d epilogue %d layout %d "
            "%d %d wsSize %d\n",
            ba, bb, bc, m, n, k, biasType, epilogue, layoutIdA, layoutIdB,
@@ -233,8 +240,8 @@ void evalCublasLt(int ba, int bb, int bc, int m, int n, int k,
     float *ptrA = nullptr, *ptrB = nullptr, *ptrC = nullptr, *bias = nullptr,
           *workspace = nullptr;
     int b = (ba < bb) ? bb : ba;
-    checkCudaErrors(cudaMalloc((void **)&ptrA, ba * m * k * sizeof(float)));
-    checkCudaErrors(cudaMalloc((void **)&ptrB, bb * k * n * sizeof(float)));
+    checkCudaErrors(cudaMalloc((void **)&ptrA, rba * rma * rka * sizeof(float)));
+    checkCudaErrors(cudaMalloc((void **)&ptrB, rbb * rkb * rnb * sizeof(float)));
     checkCudaErrors(cudaMalloc((void **)&ptrC, b * m * n * sizeof(float)));
     checkCudaErrors(cudaMalloc((void **)&workspace, wsSize * sizeof(float)));
     if (biasType != 0) {
@@ -246,9 +253,9 @@ void evalCublasLt(int ba, int bb, int bc, int m, int n, int k,
     cublasLtCreate(&handle);
 
     auto desc = MCCompiler::cublas_utils::getDesc((cublasLtEpilogue_t) epilogue);
-    auto layoutA = MCCompiler::cublas_utils::getLayout(b, m, k, layoutIdA, ba);
-    auto layoutB = MCCompiler::cublas_utils::getLayout(b, k, n, layoutIdB, bb);
-    auto layoutC = MCCompiler::cublas_utils::getLayout(b, m, n, layoutIdC, b);
+    auto layoutA = MCCompiler::cublas_utils::getLayout(b, m, k, rba, rma, rka, layoutIdA, ba);
+    auto layoutB = MCCompiler::cublas_utils::getLayout(b, k, n, rbb, rkb, rnb, layoutIdB, bb);
+    auto layoutC = MCCompiler::cublas_utils::getLayout(b, m, n, b, m, n, layoutIdC, b);
     auto layoutBias = MCCompiler::cublas_utils::getLayoutBias(b, m, n, layoutIdC, bc);
 
     auto algos = getAlgo(handle, desc, layoutA, layoutB,
@@ -267,7 +274,7 @@ void evalCublasLt(int ba, int bb, int bc, int m, int n, int k,
     }
     assert(bestIdx != -1);
     assert(!enableVerification ||
-           verify(handle, ba, bb, bc, m, n, k, biasType, (cublasLtEpilogue_t) epilogue, layoutIdA,
+           verify(handle, ba, bb, bc, m, n, k, rba, rma, rka, rbb, rkb, rnb, biasType, (cublasLtEpilogue_t) epilogue, layoutIdA,
                   layoutIdB, layoutIdC, wsSize, getTag(algos[bestIdx])));
 
     checkBlasErrors(cublasLtMatrixLayoutDestroy(layoutA));
@@ -290,19 +297,31 @@ void evalCublasLt(int ba, int bb, int bc, int m, int n, int k,
 } // namespace MCCompiler
 
 int main(int argc, char* argv[]) {
-    assert(argc  == 13);
+    assert(argc  == 19);
     int ba = atoi(argv[1]);
     int bb = atoi(argv[2]);
     int bc = atoi(argv[3]);
     int m = atoi(argv[4]);
     int n = atoi(argv[5]);
     int k = atoi(argv[6]);
-    int biasType = atoi(argv[7]);
-    int epilogue = atoi(argv[8]);
-    int layoutIdA = atoi(argv[9]);
-    int layoutIdB = atoi(argv[10]);
-    int layoutIdC = atoi(argv[11]); 
-    size_t wsSize = atoi(argv[12]);
-    MCCompiler::evalCublasLt(ba, bb, bc, m, n, k, biasType, epilogue, layoutIdA, layoutIdB, layoutIdC, wsSize);
+    int rba = atoi(argv[7]);
+    int rma = atoi(argv[8]);
+    int rka = atoi(argv[9]);
+    int rbb = atoi(argv[10]);
+    int rkb = atoi(argv[11]);
+    int rnb = atoi(argv[12]);
+    int biasType = atoi(argv[13]);
+    int epilogue = atoi(argv[14]);
+    int layoutIdA = atoi(argv[15]);
+    int layoutIdB = atoi(argv[16]);
+    int layoutIdC = atoi(argv[17]); 
+    size_t wsSize = atoi(argv[18]);
+    MCCompiler::evalCublasLt(ba, bb, bc, m, n, k, rba, rma, rka, rbb, rkb, rnb, biasType, epilogue, layoutIdA, layoutIdB, layoutIdC, wsSize);
 }
-// g++ mc/operators/cuda/cublas.cpp -o build/cublas_util
+// g++ mc/operators/cuda/cublas.cpp -o build/cublas_util -lcublas -lcudart -lcublasLt -lcurand 
+
+// 10 1 1 1 3072 768 10 1 768 1 768 3072 1 1 0 0 0 1024
+// linear [10, 1 768] [768, 3072] [3072] -> [10, 1, 3072]
+
+// 12 12 12  10 10 64  36 10 64  36 64 10  1 1 3 1 0 1024
+// 12 12 12  10 10 64  36 10 64  36 64 10  0 1 3 1 0 1024

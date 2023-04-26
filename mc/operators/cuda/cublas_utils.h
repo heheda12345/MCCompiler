@@ -71,16 +71,16 @@ cublasLtMatmulDesc_t getDesc(cublasLtEpilogue_t epilogue) {
 }
 
 
-cublasLtMatrixLayout_t getLayout(int b, int m, int n, int layoutId, int bThis) {
+cublasLtMatrixLayout_t getLayout(int b, int m, int n, int rb, int rm, int rn, int layoutId, int bThis) {
     cublasLtMatrixLayout_t layout;
 
-    size_t stride0 = (layoutId & 2) ? m : n;
+    size_t stride0 = (layoutId & 2) ? rm : rn;
     size_t stride1;
     if (layoutId & 1) {
         stride1 = stride0;
-        stride0 *= b;
+        stride0 *= rb;
     } else {
-        stride1 = m * n;
+        stride1 = rm * rn;
     }
     if (bThis == 1) {
         stride1 = 0;
