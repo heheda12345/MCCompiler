@@ -35,7 +35,7 @@ class LayerNorm(Node):
             self.beta_name: self.beta,
         }
 
-    def get_cuda_code(self, func_sig) -> str:
+    def get_cuda_code(self, func_sig, node_name) -> str:
         if self.gamma_name is None or self.beta_name is None:
             raise ValueError("gamma_name or beta_name is None")
         writer = CodeWriter()

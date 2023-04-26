@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List, Dict, Set
+from typing import List, Dict, Set, Tuple
 from mc.types import TensorType
 import onnx
 import enum
@@ -96,11 +96,17 @@ class Node:
     def unused_onnx_inputs(cls) -> List[int]:
         return []
 
-    def get_cuda_code(self, func_sig) -> str:
+    def get_cuda_code(self, func_sig, node_name) -> str:
         return func_sig + " {\n    // TODO\n}\n"
 
     def get_constant_tensors(self, node_name) -> Dict[str, np.ndarray]:
         return {}
+
+    def get_global_params(self, node_name) -> List[Tuple[str, str]]:
+        return []
+    
+    def get_init_code(self, node_name) -> str:
+        return ""
 
 
 class IndexNode:

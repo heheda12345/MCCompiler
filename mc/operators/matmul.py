@@ -1,11 +1,13 @@
 from mc.node import Node, IndexNode, gen_name
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 from mc.types import TensorType
 import onnx
 import numpy as np
 import enum
 import copy
 from mc.utils import CodeWriter
+import os
+import subprocess
 
 # https://docs.nvidia.com/cuda/cublas/index.html#cublasltepilogue-t
 class Epilogue(enum.Enum):
@@ -40,6 +42,8 @@ class UniMatMul(Node):
     alpha: float
     beta: float
     epilogue: Epilogue
+    matmul_tag: Optional[str]
+    matmul_interface: Dict[str, str]
 
     def __init__(
             self, name: str,
@@ -68,6 +72,8 @@ class UniMatMul(Node):
         self.epilogue = epilogue
         self.input_offset = copy.deepcopy(input_offset)
         self.output_offset = output_offset
+        self.matmul_interface = {}
+        self.matmul_tag = None
 
 
     @classmethod
@@ -82,11 +88,126 @@ class UniMatMul(Node):
             node.alpha, node.beta, node.epilogue
         )
 
-    def get_cuda_code(self, func_sig) -> str:
+    def gen_matmul_tag(self):
+        cache = {
+            '10,1,1,3072,768,1,1,0,2,0,1024': 'CUBLASLT 0x000000000000000d 0x0000000100000000 0x0000000000000000 0x00002db70000000c 0x0000000000000000 0x000000000000004d 0x0000000000000050 0x0000000000000000',
+            '10,1,1,3072,768,1,1,0,0,0,1024': 'CUBLASLT 0x000000000000000d 0x0000000100000000 0x0000000000000000 0x00002db700000002 0x0000000000000000 0x000000000000004d 0x0000000000000050 0x0000000000000000'
+        }
+        print(f"size_b={self.size_b}, size_m={self.size_m}, size_n={self.size_n}, size_k={self.size_k}")
+        print(f"input_stride={self.input_stride}")
+        print(f"output_stride={self.output_stride}")
+        print(f"bias_stride={self.bias_stride}")
+        print(f"alpha={self.alpha}, beta={self.beta}")
+        print(f"epilogue={self.epilogue.name}")
+        print(f"input_offset={self.input_offset}")
+        print(f"output_offset={self.output_offset}")
+
+
+        ba = self.size_b if self.input_stride[0][0] > 0 else 1
+        bb = self.size_b if self.input_stride[1][0] > 0 else 1
+        m = self.size_m
+        n = self.size_n
+        k = self.size_k
+        biasType = 1 if len(self.input_types) == 3 else 0
+        epilogue = self.epilogue
+        layoutIdA = 0
+        layoutIdB = 0
+        layoutIdC = 0
+        wsSize = 1024
+
+        self.matmul_interface = {
+            'ba': ba,
+            'bb': bb,
+            'm': m,
+            'n': n,
+            'k': k,
+            'biasType': biasType,
+            'epilogue': epilogue.value,
+            'layoutIdA': layoutIdA,
+            'layoutIdB': layoutIdB,
+            'layoutIdC': layoutIdC,
+            'wsSize': wsSize,
+        }
+        key = ",".join([str(x) for x in [ba, bb, m, n, k, biasType, epilogue.value, layoutIdA, layoutIdB, layoutIdC, wsSize]])
+        print('key', key)
+        if key in cache:
+            self.matmul_tag = cache[key]
+            return
+
+        cublas_util_path = os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../build/cublas_util'))
+        cmd = f'{cublas_util_path} {ba} {bb} {m} {n} {k} {biasType} {epilogue.value} {layoutIdA} {layoutIdB} {layoutIdC} {wsSize}'
+        proc = subprocess.Popen([cmd], stdout=subprocess.PIPE, shell=True)
+        (out, err) = proc.communicate()
+        if err is not None:
+            raise RuntimeError(f"Failed to generate matmul tag with {cmd}: {err}")
+        out = out.decode('utf-8')
+        for line in out.splitlines():
+            if line.startswith('tag: '):
+                self.matmul_tag = line[5:]
+                print(self.matmul_tag)
+                return
+        raise ValueError(f"Failed to parse tag from {cmd}: {out}")
+
+    def get_global_params(self, node_name) -> List[Tuple[str, str]]:
+        if self.matmul_tag is None:
+            self.gen_matmul_tag()
+        global_params = [
+            ('cublasLtHandle_t', f'{node_name}__handle'),
+            ('cublasLtMatmulDesc_t', f'{node_name}__desc'),
+            ('cublasLtMatrixLayout_t', f'{node_name}__layoutA'),
+            ('cublasLtMatrixLayout_t', f'{node_name}__layoutB'),
+            ('cublasLtMatrixLayout_t', f'{node_name}__layoutC'),
+            ('char*', f'{node_name}__workspace'),
+            ('float', f'{node_name}__alpha'),
+            ('float', f'{node_name}__beta'),
+            ('cublasLtMatmulAlgo_t', f'{node_name}__algo'),
+            ('size_t', f'{node_name}__wsSize')
+        ]
+        if self.matmul_interface['biasType'] == 1:
+            global_params.append(('cublasLtMatrixLayout_t', f'{node_name}__layoutBias'))
+        return global_params
+
+    def get_init_code(self, node_name) -> str:
+        if self.matmul_tag is None:
+            self.gen_matmul_tag()
+        ba, bb, m, n, k, biasType, epilogue, layoutIdA, layoutIdB, layoutIdC, wsSize = \
+            self.matmul_interface['ba'], self.matmul_interface['bb'], self.matmul_interface['m'], \
+            self.matmul_interface['n'], self.matmul_interface['k'], self.matmul_interface['biasType'], \
+            self.matmul_interface['epilogue'], self.matmul_interface['layoutIdA'], \
+            self.matmul_interface['layoutIdB'], self.matmul_interface['layoutIdC'], self.matmul_interface['wsSize']
+        b = max(ba, bb)
+        writer = CodeWriter()
+        if self.beta != 0.0: raise NotImplementedError
+        if biasType == 1: beta = 1.0
+        else: beta = 0.0
+        writer.write(f''' // {node_name}
+checkBlasErrors(cublasLtCreate(&{node_name}__handle));
+{node_name}__desc = MCCompiler::cublas_utils::getDesc( 
+    (cublasLtEpilogue_t){epilogue});
+{node_name}__layoutA = MCCompiler::cublas_utils::getLayout({b}, {m}, {k}, {layoutIdA}, {ba});
+{node_name}__layoutB = MCCompiler::cublas_utils::getLayout({b}, {k}, {n}, {layoutIdB}, {bb});
+{node_name}__layoutC = MCCompiler::cublas_utils::getLayout({b}, {m}, {n}, {layoutIdC}, {b});
+checkCudaErrors(cudaMalloc((void **)&{node_name}__workspace, {wsSize}));
+checkCudaErrors(cudaMalloc((void **)&{node_name}__alpha, sizeof(float)));
+checkCudaErrors(cudaMalloc((void **)&{node_name}__beta, sizeof(float)));
+{node_name}__alpha = {self.alpha}, {node_name}__beta = {beta};
+{node_name}__algo = MCCompiler::cublas_utils::getAlgo("{self.matmul_tag}");
+{node_name}__wsSize = {wsSize};
+''')    
+        if biasType == 1:
+            writer.wl(f'{node_name}__layoutBias = MCCompiler::cublas_utils::getLayoutBias({b}, {m}, {n}, {layoutIdC}, {b});')
+        return writer.get_code()
+
+    def get_cuda_code(self, func_sig, node_name) -> str:
+        if self.matmul_tag is None:
+            self.gen_matmul_tag()
         writer = CodeWriter()
         writer.wl(func_sig)
         writer.block_start()
-        writer.write("// TODO")
+        if self.matmul_interface['biasType'] == 0:
+            writer.wl(f'checkBlasErrors(cublasLtMatmul({node_name}__handle, {node_name}__desc, &{node_name}__alpha, input0, {node_name}__layoutA, input1, {node_name}__layoutB, &{node_name}__beta, ouptut0, {node_name}__layoutC, output0, {node_name}__layoutC, &{node_name}__algo, {node_name}__workspace, {node_name}__wsSize, 0));')
+        else:
+            writer.wl(f'checkBlasErrors(cublasLtMatmul({node_name}__handle, {node_name}__desc, &{node_name}__alpha, input0, {node_name}__layoutA, input1, {node_name}__layoutB, &{node_name}__beta, input2, {node_name}__layoutBias, output0, {node_name}__layoutC, &{node_name}__algo, {node_name}__workspace, {node_name}__wsSize, 0));')
         writer.block_end()
         return writer.get_code() 
 
@@ -127,9 +248,18 @@ class MatMul(UniMatMulNoBias):
         input_constants: List[Optional[np.ndarray]],
     ) -> None:
         # super().__init__(name, input_nodes, output_nodes, input_types, output_types)
-        if len(input_types[0].shape) > 3 or len(input_types[1].shape) > 3:
+        if len(input_types[0].shape) <= 2 and len(input_types[1].shape) <= 2:
+            size_b = 1
+        elif len(input_types[0].shape) == 3 and len(input_types[1].shape) == 3:
+            size_b = max(input_types[0].shape[0], input_types[1].shape[0])
+        elif len(input_types[0].shape) == 3:
+            size_b = input_types[0].shape[0]
+        elif len(input_types[1].shape) == 3:
+            size_b = input_types[1].shape[0]
+        elif len(input_types[0].shape) > 3 or len(input_types[1].shape) > 3:
             raise NotImplementedError
-        size_b = max(input_types[0].shape[0], input_types[1].shape[0])
+        else:
+            raise ValueError("unreachable")
         size_m = input_types[0].shape[-2]
         size_k = input_types[0].shape[-1]
         size_n = input_types[1].shape[-1]

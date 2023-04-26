@@ -2,78 +2,45 @@
 #include <iomanip>
 #include <sstream>
 
-#include <cublas_v2.h>
-#include <cublasLt.h>
 #include <vector>
 #include <assert.h>
 #include <iostream>
 #include "common.h"
+#include "cublas_utils.h"
 
-namespace memb {
+inline void __curandSafeCall(curandStatus_t err, const char *file, const int line )
+    {
+    if( CURAND_STATUS_SUCCESS != err) {
+        fprintf(stderr, "%s(%i) : curandSafeCall() CURAND error %d: ",
+                file, line, (int)err);
+        switch (err) {
+            case CURAND_STATUS_VERSION_MISMATCH:    fprintf(stderr, "CURAND_STATUS_VERSION_MISMATCH");
+            case CURAND_STATUS_NOT_INITIALIZED:     fprintf(stderr, "CURAND_STATUS_NOT_INITIALIZED");
+            case CURAND_STATUS_ALLOCATION_FAILED:   fprintf(stderr, "CURAND_STATUS_ALLOCATION_FAILED");
+            case CURAND_STATUS_TYPE_ERROR:          fprintf(stderr, "CURAND_STATUS_TYPE_ERROR");
+            case CURAND_STATUS_OUT_OF_RANGE:        fprintf(stderr, "CURAND_STATUS_OUT_OF_RANGE");
+            case CURAND_STATUS_LENGTH_NOT_MULTIPLE: fprintf(stderr, "CURAND_STATUS_LENGTH_NOT_MULTIPLE");
+            case CURAND_STATUS_DOUBLE_PRECISION_REQUIRED: 
+                                                    fprintf(stderr, "CURAND_STATUS_DOUBLE_PRECISION_REQUIRED");
+            case CURAND_STATUS_LAUNCH_FAILURE:      fprintf(stderr, "CURAND_STATUS_LAUNCH_FAILURE");
+            case CURAND_STATUS_PREEXISTING_FAILURE: fprintf(stderr, "CURAND_STATUS_PREEXISTING_FAILURE");
+            case CURAND_STATUS_INITIALIZATION_FAILED:     
+                                                    fprintf(stderr, "CURAND_STATUS_INITIALIZATION_FAILED");
+            case CURAND_STATUS_ARCH_MISMATCH:       fprintf(stderr, "CURAND_STATUS_ARCH_MISMATCH");
+            case CURAND_STATUS_INTERNAL_ERROR:      fprintf(stderr, "CURAND_STATUS_INTERNAL_ERROR");
+            default: fprintf(stderr, "CURAND Unknown error code\n");
+        }
+        exit(-1);
+    }
+}
+
+#define curandSafeCall(err) __curandSafeCall (err, __FILE__, __LINE__)
+
+namespace MCCompiler {
 
 constexpr int numWarmup = 32;
 constexpr int numEval = 128;
 constexpr bool enableVerification = false;
-
-cublasLtMatmulDesc_t getDesc(cublasLtEpilogue_t epilogue) {
-    auto transa = CUBLAS_OP_N;
-    auto transb = CUBLAS_OP_N;
-    cublasLtMatmulDesc_t desc;
-    checkBlasErrors(cublasLtMatmulDescCreate(&desc, CUBLAS_COMPUTE_32F_FAST_TF32,
-                                            CUDA_R_32F));
-    checkBlasErrors(cublasLtMatmulDescSetAttribute(
-        desc, CUBLASLT_MATMUL_DESC_TRANSA, &transa, sizeof(transa)));
-    checkBlasErrors(cublasLtMatmulDescSetAttribute(
-        desc, CUBLASLT_MATMUL_DESC_TRANSB, &transb, sizeof(transb)));
-    checkBlasErrors(cublasLtMatmulDescSetAttribute(
-        desc, CUBLASLT_MATMUL_DESC_EPILOGUE, &epilogue, sizeof(epilogue)));
-    return desc;
-}
-
-cublasLtMatrixLayout_t getLayout(int b, int m, int n, int layoutId, int bThis) {
-    cublasLtMatrixLayout_t layout;
-
-    size_t stride0 = (layoutId & 2) ? m : n;
-    size_t stride1;
-    if (layoutId & 1) {
-        stride1 = stride0;
-        stride0 *= b;
-    } else {
-        stride1 = m * n;
-    }
-    if (bThis == 1) {
-        stride1 = 0;
-    }
-    checkBlasErrors(
-        cublasLtMatrixLayoutCreate(&layout, CUDA_R_32F, m, n, stride0));
-    auto layoutOrder = (layoutId & 2) ? CUBLASLT_ORDER_COL : CUBLASLT_ORDER_ROW;
-    checkBlasErrors(
-        cublasLtMatrixLayoutSetAttribute(layout, CUBLASLT_MATRIX_LAYOUT_ORDER,
-                                         &layoutOrder, sizeof(layoutOrder)));
-    checkBlasErrors(cublasLtMatrixLayoutSetAttribute(
-        layout, CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT, &b, sizeof(b)));
-    checkBlasErrors(cublasLtMatrixLayoutSetAttribute(
-        layout, CUBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET, &stride1,
-        sizeof(stride1)));
-    return layout;
-}
-
-cublasLtMatrixLayout_t getLayoutBias(int b, int m, int n, int layoutId,
-                                     int bThis) {
-    cublasLtMatrixLayout_t layout;
-    size_t stride = 0;
-    checkBlasErrors(cublasLtMatrixLayoutCreate(&layout, CUDA_R_32F, m, n, 0));
-    auto layoutOrder = (layoutId & 2) ? CUBLASLT_ORDER_COL : CUBLASLT_ORDER_ROW;
-    checkBlasErrors(
-        cublasLtMatrixLayoutSetAttribute(layout, CUBLASLT_MATRIX_LAYOUT_ORDER,
-                                         &layoutOrder, sizeof(layoutOrder)));
-    checkBlasErrors(cublasLtMatrixLayoutSetAttribute(
-        layout, CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT, &b, sizeof(b)));
-    checkBlasErrors(cublasLtMatrixLayoutSetAttribute(
-        layout, CUBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET, &stride,
-        sizeof(stride)));
-    return layout;
-}
 
 std::vector<cublasLtMatmulAlgo_t> getAlgo(const cublasLtHandle_t &handle,
                                           const cublasLtMatmulDesc_t &desc,
@@ -156,22 +123,10 @@ std::string getTag(const cublasLtMatmulAlgo_t &algo) {
     return sout.str();
 }
 
-cublasLtMatmulAlgo_t getAlgo(const std::string &tag) {
-    cublasLtMatmulAlgo_t algo;
-    std::istringstream sin(tag);
-    std::string head;
-    sin >> head;
-    assert(head == "CUBLASLT");
-    for (int i = 0; i < 8; i++) {
-        sin >> std::hex >> algo.data[i];
-    }
-    return algo;
-}
-
 bool verify(const cublasLtHandle_t &handle, int ba, int bb, int m, int n, int k,
             int biasType, cublasLtEpilogue_t epilogue, int layoutIdA, int layoutIdB,
             int layoutIdC, size_t wsSize, const std::string &tag) {
-    auto algo = getAlgo(tag);
+    auto algo = MCCompiler::cublas_utils::getAlgo(tag);
     float *ptrA = nullptr, *ptrB = nullptr, *ptrC = nullptr, *bias = nullptr,
           *workspace = nullptr;
     int b = (ba < bb) ? bb : ba;
@@ -266,10 +221,14 @@ bool verify(const cublasLtHandle_t &handle, int ba, int bb, int m, int n, int k,
     return true;
 }
 
-std::pair<float, std::string> evalCublasLt(int ba, int bb, int m, int n, int k,
-                                           int biasType, cublasLtEpilogue_t epilogue,
-                                           int layoutIdA, int layoutIdB,
-                                           int layoutIdC, size_t wsSize) {
+void evalCublasLt(int ba, int bb, int m, int n, int k,
+                         int biasType, int epilogue,
+                         int layoutIdA, int layoutIdB,
+                         int layoutIdC, size_t wsSize) {
+    printf("evaluating %d %d %d %d %d with biastype %d epilogue %d layout %d "
+           "%d %d wsSize %d\n",
+           ba, bb, m, n, k, biasType, epilogue, layoutIdA, layoutIdB,
+           layoutIdC, wsSize);
     float *ptrA = nullptr, *ptrB = nullptr, *ptrC = nullptr, *bias = nullptr,
           *workspace = nullptr;
     int b = (ba < bb) ? bb : ba;
@@ -284,7 +243,7 @@ std::pair<float, std::string> evalCublasLt(int ba, int bb, int m, int n, int k,
     cublasLtHandle_t handle;
     cublasLtCreate(&handle);
 
-    auto desc = getDesc(epilogue);
+    auto desc = getDesc((cublasLtEpilogue_t) epilogue);
     auto layoutA = getLayout(b, m, k, layoutIdA, ba);
     auto layoutB = getLayout(b, k, n, layoutIdB, bb);
     auto layoutC = getLayout(b, m, n, layoutIdC, b);
@@ -306,7 +265,7 @@ std::pair<float, std::string> evalCublasLt(int ba, int bb, int m, int n, int k,
     }
     assert(bestIdx != -1);
     assert(!enableVerification ||
-           verify(handle, ba, bb, m, n, k, biasType, epilogue, layoutIdA,
+           verify(handle, ba, bb, m, n, k, biasType, (cublasLtEpilogue_t) epilogue, layoutIdA,
                   layoutIdB, layoutIdC, wsSize, getTag(algos[bestIdx])));
 
     checkBlasErrors(cublasLtMatrixLayoutDestroy(layoutA));
@@ -321,9 +280,26 @@ std::pair<float, std::string> evalCublasLt(int ba, int bb, int m, int n, int k,
     if (biasType != 0) {
         checkCudaErrors(cudaFree(bias));
     }
-
-    return {bestTime, getTag(algos[bestIdx])};
+    printf("best time: %f\n", bestTime);
+    printf("tag: %s\n", getTag(algos[bestIdx]).c_str());
 }
+
+
 } // namespace MCCompiler
 
-// g++ -fPIC -shared -Wl,-soname,libcublas_util.so -o libcublas_util.so mc/operators/cuda/cublas.cpp       
+int main(int argc, char* argv[]) {
+    assert(argc  == 12);
+    int ba = atoi(argv[1]);
+    int bb = atoi(argv[2]);
+    int m = atoi(argv[3]);
+    int n = atoi(argv[4]);
+    int k = atoi(argv[5]);
+    int biasType = atoi(argv[6]);
+    int epilogue = atoi(argv[7]);
+    int layoutIdA = atoi(argv[8]);
+    int layoutIdB = atoi(argv[9]);
+    int layoutIdC = atoi(argv[10]); 
+    size_t wsSize = atoi(argv[11]);
+    MCCompiler::evalCublasLt(ba, bb, m, n, k, biasType, epilogue, layoutIdA, layoutIdB, layoutIdC, wsSize);
+}
+// g++ mc/operators/cuda/cublas.cpp -o build/cublas_util

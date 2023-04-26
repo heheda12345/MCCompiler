@@ -13,6 +13,8 @@ def main():
     model_name = os.path.split(sys.argv[1])[1].split('.')[0]
     print("model_name", model_name)
     compile(model_onnx.graph, f'tmp/{model_name}', f'../model/bin/{model_name}')
+    print("start run")
+    os.system(f'tmp/{model_name}/run')
 
 if __name__ == "__main__":
     main()

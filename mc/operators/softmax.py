@@ -26,7 +26,7 @@ class Softmax(Node):
                    axis=onnx_node.attribute[0].i)
 
 
-    def get_cuda_code(self, func_sig) -> str:
+    def get_cuda_code(self, func_sig, node_name) -> str:
         if self.axis != -1 and self.axis != len(self.input_types[0].shape) - 1:
             raise NotImplementedError
         row_size = self.input_types[0].shape[-1]

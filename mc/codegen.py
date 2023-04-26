@@ -107,6 +107,10 @@ void print_tensor_cpu(std::string name, float* data, size_t size) {
                     self.wl(f'{cpp_type(node.output_types[i].dtype)}* {self.tensor_name(IndexNode(node, i))};')
         for tensor_name, tensor in self.node_constant_tensors.items():
             self.wl(f'{cpp_type(tensor.dtype)}* {tensor_name};')
+        for node in node_list:
+            global_params = node.get_global_params(self.node_name(node))
+            for ty, name in global_params:
+                self.wl(f'{ty} {name};')
         self.wl('')
         buffer_size = 0
         align_size = 256
@@ -138,7 +142,13 @@ void print_tensor_cpu(std::string name, float* data, size_t size) {
         for tensor_name, tensor in self.node_constant_tensors.items():
             self.wl(f'load_tensor("{os.path.join(self.codegen_dir, "constants", tensor_name)}.bin", {tensor_name}, {tensor.size * tensor.dtype.itemsize});')
         assert buffer_ptr == buffer_size
+        for node in node_list:
+            init_code = node.get_init_code(self.node_name(node))
+            if init_code is not None:
+                self.write(init_code)
         self.block_end()
+
+
         self.wl('')
 
 
@@ -153,7 +163,7 @@ void print_tensor_cpu(std::string name, float* data, size_t size) {
             self.wl(f'// {node}')
             self.wl(f'// {node.input_types}')
             self.wl(f'// {node.output_types}')
-            self.write(node.get_cuda_code(func_sig))
+            self.write(node.get_cuda_code(func_sig, self.node_name(node)))
             self.wl('')
         
         run_params = []
@@ -223,9 +233,9 @@ def codegen(graph, codegen_dir, data_dir):
     writer.write_code()
     print(writer.code_str)
     os.makedirs(codegen_dir, exist_ok=True)
-    with open(os.path.join(codegen_dir, 'gen.cu'), 'w') as f:
+    with open(os.path.join(codegen_dir, 'run.cu'), 'w') as f:
         f.write(writer.code_str)
-    ret = os.system(f"nvcc -std=c++11 -arch=sm_70 -O3 -o {os.path.join(codegen_dir, 'gen')} {os.path.join(codegen_dir, 'gen.cu')}")
+    ret = os.system(f"nvcc -std=c++11 -arch=sm_70 -O3 -lcublas -lcudart -lcublasLt -o {os.path.join(codegen_dir, 'run')} {os.path.join(codegen_dir, 'run.cu')}")
     assert ret == 0, f"nvcc failed with code {ret}"
 
     # TODO: save constants
