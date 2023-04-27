@@ -52,6 +52,7 @@ class MergeTranspose(Optimization):
                     if old_perm != (0, 1, 2): # TODO: fuse multiple transposes
                         continue
                     if matmul_node.real_input_shape[input_idx] != matmul_node.input_types[input_idx].shape:
+                        logging.warning(f"{matmul_node.name}: shape mismatch matmul.real {matmul_node.real_input_shape[input_idx]} vs type in graph {matmul_node.input_types[input_idx].shape}")
                         continue
                     new_perm = tuple(copy.deepcopy(node.perm))
                     matmul_node.input_perm[input_idx] = new_perm

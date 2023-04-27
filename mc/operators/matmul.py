@@ -209,9 +209,9 @@ class UniMatMul(Node):
         ba, bb, bc, m, n, k, rba, rma, rka, rbb, rkb, rnb, biasType, epilogue, layoutIdA, layoutIdB, layoutIdC, wsSize = self.matmul_interface.values()
         b = max(ba, bb)
         writer = CodeWriter()
-        if self.beta != 0.0: raise NotImplementedError
-        if biasType == 1: beta = 1.0
-        else: beta = 0.0
+        if biasType == 1: assert self.beta != 0.0, f"bias should be removed in {node_name} as beta is 0.0"
+        else: assert self.beta == 0.0
+        beta = self.beta
         writer.write(f''' // {node_name}
 checkBlasErrors(cublasLtCreate(&{node_name}__handle));
 {node_name}__desc = MCCompiler::cublas_utils::getDesc( 
@@ -313,16 +313,16 @@ class Gemm(UniMatMul):
         transB = attributes["transB"].i if "transB" in attributes else 0
         if transA:
             size_k, size_m = input_types[0].shape
-            input0_perm = [0, 2, 1]
+            input0_perm = (0, 2, 1)
         else:
             size_m, size_k = input_types[0].shape
-            input0_perm = [0, 1, 2]
+            input0_perm = (0, 1, 2)
         if transB:
             size_n = input_types[1].shape[0]
-            input1_perm = [0, 2, 1]
+            input1_perm = (0, 2, 1)
         else:
             size_n = input_types[1].shape[1]
-            input1_perm = [0, 1, 2]
-        bias_perm = [0, 1, 2]
-        output_perm = [0, 1, 2]
+            input1_perm = (0, 1, 2)
+        bias_perm = (0, 1, 2)
+        output_perm = (0, 1, 2)
         return cls(name, input_nodes, output_nodes, input_types, output_types, input_constants, 1, 1, size_m, size_n, size_k, input0_perm, input1_perm, output_perm, bias_perm, alpha=alpha, beta=beta)

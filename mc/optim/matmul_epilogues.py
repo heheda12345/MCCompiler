@@ -20,6 +20,7 @@ class Match_CUBLASLT_EPILOGUE_GELU_BIAS(PatternToNode):
     def new_node_from_matched_nodes(self, matched_nodes: Dict[str, Node]):
         new_node = ops.UniMatMul.copy_attr_from(matched_nodes["matmul.0"], num_inputs=3)
         new_node.epilogue = ops.matmul.Epilogue.CUBLASLT_EPILOGUE_GELU
+        new_node.beta = 1.0
         return new_node
     
     def is_match(self, node: Node, name_in_pattern: str):
@@ -38,6 +39,7 @@ class Match_CUBLASLT_EPILOGUE_BIAS(PatternToNode):
     
     def new_node_from_matched_nodes(self, matched_nodes: Dict[str, Node]):
         new_node = ops.UniMatMul.copy_attr_from(matched_nodes["matmul.0"], num_inputs=3)
+        new_node.beta = 1.0
         return new_node
     
     def is_match(self, node: Node, name_in_pattern: str):
@@ -56,6 +58,7 @@ class Match_CUBLASLT_EPILOGUE_BIAS_V2(PatternToNode):
     
     def new_node_from_matched_nodes(self, matched_nodes: Dict[str, Node]):
         new_node = ops.UniMatMul.copy_attr_from(matched_nodes["matmul.0"], num_inputs=3)
+        new_node.beta = 1.0
         return new_node
     
     def is_match(self, node: Node, name_in_pattern: str):

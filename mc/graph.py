@@ -101,8 +101,8 @@ class Graph:
         src_node = node.input_nodes[0].node
         dst_nodes = node.output_nodes[0]
         src_node.remove_output_edge(node.input_nodes[0].index, node.name)
-        src_node.add_output(node.input_nodes[0], dst_nodes[0])
         for dst_node in dst_nodes:
+            src_node.add_output(node.input_nodes[0], dst_node)
             dst_node.node.input_nodes[dst_node.index] = IndexNode(src_node, node.input_nodes[0].index)
 
     def get_node(self, name: str) -> Node:
@@ -149,16 +149,26 @@ class Graph:
         remain_degree = {}
         for node in self.nodes.values():
             remain_degree[node.name] = len(node.input_nodes)
+        # for node in self.nodes.values():
+        #     print(node)
+        # print("before sort", remain_degree['Transpose_49'], remain_degree['onnx::Gemm_102'])
         sorted_nodes = []
         while len(queue) > 0:
             node = queue.pop()
             sorted_nodes.append(node)
+            # print("before processing", node.name, remain_degree['Transpose_49'], remain_degree['onnx::Gemm_102'])
             for output in node.output_nodes:
                 for o in output:
+                    # if node.name == 'Transpose_49': print(o.node.name, remain_degree[o.node.name])
                     remain_degree[o.node.name] -= 1
                     if remain_degree[o.node.name] == 0:
                         queue.append(o.node)
         if len(sorted_nodes) != len(self.nodes):
+            # print(len(sorted_nodes), len(self.nodes))
+            sorted_node_names = [node.name for node in sorted_nodes]
+            for node in self.nodes.values():
+                if node.name not in sorted_node_names:
+                    logging.error(f'mismatch node: {node.name}, remain_degree = {remain_degree[node.name]}')
             raise RuntimeError('Graph is not a DAG')
         return sorted_nodes
     
