@@ -30,10 +30,10 @@ class Softmax(Node):
         if self.axis != -1 and self.axis != len(self.input_types[0].shape) - 1:
             raise NotImplementedError
         row_size = self.input_types[0].shape[-1]
-        col_size = self.input_types[0].size() // row_size
+        num_row = self.input_types[0].size() // row_size
         writer = CodeWriter()
         writer.wl(func_sig)
         writer.block_start()
-        writer.wl(f"MCCompiler::SoftMax::softmax_last_col(input0, output0, {row_size}, {col_size});")
+        writer.wl(f"MCCompiler::SoftMax::softmax_last_col(input0, output0, {row_size}, {num_row});")
         writer.block_end()
         return writer.get_code()
