@@ -115,6 +115,22 @@ class MergeSlice(Optimization):
         graph.clear_unused_nodes()
 
 
+class BMM2GEMM(Optimization):
+    def apply(self, graph):
+        for node in graph.nodes.values():
+            if isinstance(node, ops.UniMatMul):
+                print("bmm2gemm", node.name, node.size_ba, node.size_bb, node.size_m, node.size_n, node.size_k, node.input_types)
+                print(node.size_ba > 1 , node.size_bb == 1 , (len(node.input_types) < 3 or node.input_types[2].size() // node.size_n == 1) , node.size_ba == node.real_input_shape[0][0] , node.size_m == node.real_input_shape[0][1])
+                if node.size_ba > 1 and node.size_bb == 1 and (len(node.input_types) < 3 or node.input_types[2].size() // node.size_n == 1) and node.size_ba == node.real_input_shape[0][0] and node.size_m == node.real_input_shape[0][1]:
+                    logging.info(f"{node.name}: change to bmm")
+                    batch_size = node.size_ba
+                    node.size_ba = 1
+                    node.size_m *= batch_size
+                    node.real_input_shape[0][1] *= node.real_input_shape[0][0]
+                    node.real_input_shape[0][0] = 1
+
+
+
 class MatchCublasAttrs(Optimization):
     def __init__(self):
         super().__init__()
@@ -126,6 +142,7 @@ class MatchCublasAttrs(Optimization):
             MergeTranspose(),
             MergeSlice(),
             MergeTransposeToOutput(),
+            BMM2GEMM(),
         ]
         for ptn in passes:
             ptn.apply(graph)
