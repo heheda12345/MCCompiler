@@ -78,9 +78,11 @@ void load_tensor(std::string f_name, void* buffer, size_t size, bool on_gpu=true
 }
 
 void check_equal_cpu(std::string f_name, float* out, float* ref, size_t size) {
-    float eps = 1e-3;
+    float eps = 1e-5;
     for (size_t i = 0; i < size; i++) {
-        if (out[i] - ref[i] > eps || ref[i] - out[i] > eps) {
+        float err = fabs(out[i] - ref[i]);
+        float larger = std::max(fabs(out[i]), fabs(ref[i]));
+        if (err > eps && err > eps * larger) {
             fprintf(stderr, "Error: %s at %d: %f != %f\n", f_name.c_str(), i, out[i], ref[i]);
             break;
         }
@@ -182,7 +184,7 @@ void print_tensor_cpu(std::string name, float* data, size_t size) {
             params = [self.tensor_name(input_node) for input_node in node.input_nodes]
             params += [self.tensor_name(IndexNode(node, i)) for i in range(len(node.output_types))]
             self.wl(f'kernel_{self.node_name(node)}({", ".join(params)});')
-            self.wl(f'checkCudaErrors(cudaDeviceSynchronize());') # for testing only
+            # self.wl(f'checkCudaErrors(cudaDeviceSynchronize());') # for testing only
 
         self.block_end()
         self.wl('')
@@ -208,7 +210,8 @@ void print_tensor_cpu(std::string name, float* data, size_t size) {
             self.wl(f'{self.tensor_name(node.input_nodes[0])}_ref = ({cpp_type(node.input_types[0].dtype)}*) malloc({size});')
             self.wl(f'{self.tensor_name(node.input_nodes[0])}_cpu = ({cpp_type(node.input_types[0].dtype)}*) malloc({size});')
             self.wl(f'load_tensor("{os.path.join(self.data_dir, f"output{i}")}.bin", {self.tensor_name(node.input_nodes[0])}_ref, {size}, false);')
-        self.wl('run(' + ', '.join([self.tensor_name(IndexNode(node, 0)) for node in self.graph.inputs] + [self.tensor_name(node.input_nodes[0]) for node in self.graph.outputs]) + ');')
+        run_cmd = 'run(' + ', '.join([self.tensor_name(IndexNode(node, 0)) for node in self.graph.inputs] + [self.tensor_name(node.input_nodes[0]) for node in self.graph.outputs]) + ');'
+        self.wl(run_cmd)
         for i, node in enumerate(self.graph.outputs):
             size = node.input_types[0].size() * node.input_types[0].dtype.itemsize
             self.wl(f'checkCudaErrors(cudaMemcpy({self.tensor_name(node.input_nodes[0])}_cpu, {self.tensor_name(node.input_nodes[0])}, {size}, cudaMemcpyDeviceToHost));')
@@ -217,6 +220,29 @@ void print_tensor_cpu(std::string name, float* data, size_t size) {
             self.wl(f'check_equal_cpu("{self.tensor_name(node.input_nodes[0])}", {self.tensor_name(node.input_nodes[0])}_cpu, {self.tensor_name(node.input_nodes[0])}_ref, {node.input_types[0].size()});')
             self.wl(f'print_tensor_cpu("{self.tensor_name(node.input_nodes[0])}_out", {self.tensor_name(node.input_nodes[0])}_cpu, {node.input_types[0].size()});')
             self.wl(f'print_tensor_cpu("{self.tensor_name(node.input_nodes[0])}_ref", {self.tensor_name(node.input_nodes[0])}_ref, {node.input_types[0].size()});')
+        self.wl('int n_warmup = 100, n_run = 100;')
+        self.wl('checkCudaErrors(cudaDeviceSynchronize());')
+        self.wl('for (int i = 0; i < n_warmup; i++)')
+        self.block_start()
+        self.wl('auto start_time = std::chrono::system_clock::now();')
+        self.wl(run_cmd)
+        self.wl('checkCudaErrors(cudaDeviceSynchronize());')
+        self.wl('auto end_time = std::chrono::system_clock::now();')
+        self.wl('std::chrono::duration<double> time = end_time - start_time;')
+        self.wl('printf("Warmup %d: %f ms\\n", i, time.count() * 1000);')
+        self.block_end()
+        self.wl('checkCudaErrors(cudaDeviceSynchronize());')
+        self.wl('checkCudaErrors(cudaProfilerStart());')
+        self.wl('auto start_time = std::chrono::system_clock::now();')
+        self.wl('for (int i = 0; i < n_run; i++)')
+        self.block_start()
+        self.wl(run_cmd)
+        self.block_end()
+        self.wl('checkCudaErrors(cudaDeviceSynchronize());')
+        self.wl('auto end_time = std::chrono::system_clock::now();')
+        self.wl('checkCudaErrors(cudaProfilerStop());')
+        self.wl('std::chrono::duration<double> time = end_time - start_time;')
+        self.wl('printf("Time: %f ms\\n", time.count() / n_run * 1000);')
         self.wl('return 0;')
         self.block_end()
 

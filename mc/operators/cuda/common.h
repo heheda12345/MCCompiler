@@ -1,4 +1,8 @@
 #pragma once
+
+#include <chrono>
+#include <cuda_profiler_api.h>
+
 #define UNREACHABLE() { \
     printf("file %s line %i: unreachable!\n", __FILE__, __LINE__); \
     fflush(stdout); \
