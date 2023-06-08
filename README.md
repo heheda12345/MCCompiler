@@ -1,5 +1,8 @@
 # MCCompiler: A Deep Learning Compiler for Transformer-based Models
-Usage:
+## Dependency
+* python: onnx >= 1.14, onnxsim, numpy, torch (optional, for model export only)
+* c++ libraries: cuda, cublas, curand
+## Usage
 1. Build dependency
     ```
     mkdir build
